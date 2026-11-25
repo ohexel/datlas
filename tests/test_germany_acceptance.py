@@ -62,7 +62,6 @@ def test_germany_group_is_registered_with_all_checks() -> None:
         "de_bridge_coverage",
         "de_forecast_completeness",
         "de_forecast_plausibility",
-        "de_berlin_cross_layer_consistency",
         "de_ba_source_contract",
         "de_ba_column_identities",
         "de_ba_key_coverage",

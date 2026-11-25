@@ -55,7 +55,7 @@ GERMANY_PUBLISH_JOB = dg.define_asset_job(
     selection=dg.AssetSelection.assets(analytical_de_current_forecast_25h),
     description=(
         "Publish the current complete Germany run, apply retention and run "
-        "checks 5-7."
+        "checks 5-6."
     ),
 )
 

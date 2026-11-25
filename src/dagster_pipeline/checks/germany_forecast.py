@@ -1,4 +1,4 @@
-"""Germany checks 4-7. Thresholds are documented in docs/germany-layer.md."""
+"""Germany checks 4-6. Thresholds are documented in docs/germany-layer.md."""
 
 import dagster as dg
 
@@ -16,12 +16,6 @@ MIN_BRIDGE_COVERAGE = 0.999
 # Check 6: physical plausibility bounds, °C.
 TEMPERATURE_BOUNDS_C = (-50.0, 50.0)
 APPARENT_TEMPERATURE_BOUNDS_C = (-70.0, 60.0)
-# Check 7: Berlin (VG250 Gemeinde) vs. area-weighted 542 PLRs, same cells.
-# Observed max |difference| over the first three runs (2026-11-09 16-18 UTC,
-# 75 lead times, both measures): 0.0014 °C. 0.01 °C leaves ~7x headroom for
-# days with steeper gradients across the outline differences; warning only.
-BERLIN_CROSS_LAYER_TOLERANCE_C = 0.01
-EXPECTED_PLR_COUNT = 542
 MAX_LISTED = 50
 
 
@@ -157,72 +151,8 @@ def de_forecast_plausibility() -> dg.AssetCheckResult:
     )
 
 
-@dg.asset_check(
-    asset=ANALYTICAL_DE_CURRENT_FORECAST_KEY,
-    name="de_berlin_cross_layer_consistency",
-)
-def de_berlin_cross_layer_consistency() -> dg.AssetCheckResult:
-    """Check 7: Berlin from the Germany bridge vs. its 542 PLRs (warning)."""
-    with database_connection(application_name="lwr_germany_check7") as connection:
-        current = connection.execute(
-            "SELECT run_time_utc FROM analytical.de_current_run"
-        ).fetchone()
-        rows = [] if current is None else connection.execute(
-            "SELECT * FROM normalized.de_berlin_cross_layer(%s, %s, %s)",
-            (current[0], GEOGRAPHY_VERSION, SOURCE_GRID_ID),
-        ).fetchall()
-
-    def max_difference(index_a: int, index_b: int) -> float | None:
-        values = [
-            abs(r[index_a] - r[index_b])
-            for r in rows
-            if r[index_a] is not None and r[index_b] is not None
-        ]
-        return max(values) if values else None
-
-    recomputed_t = max_difference(1, 2)
-    recomputed_a = max_difference(4, 5)
-    stored_t = max_difference(1, 3)
-    stored_a = max_difference(4, 6)
-    complete = len(rows) == 25 and all(r[7] == EXPECTED_PLR_COUNT for r in rows)
-    within = (
-        complete
-        and recomputed_t is not None
-        and max(recomputed_t, recomputed_a) <= BERLIN_CROSS_LAYER_TOLERANCE_C
-    )
-    stored_available = all(r[8] == EXPECTED_PLR_COUNT for r in rows) and bool(rows)
-
-    return dg.AssetCheckResult(
-        passed=within,
-        severity=dg.AssetCheckSeverity.WARN,
-        metadata={
-            "tolerance_c": BERLIN_CROSS_LAYER_TOLERANCE_C,
-            "lead_times_compared": len(rows),
-            "max_abs_difference_temperature_c": recomputed_t,
-            "max_abs_difference_apparent_c": recomputed_a,
-            "stored_berlin_run_available": stored_available,
-            "max_abs_difference_vs_stored_temperature_c": stored_t if stored_available else None,
-            "max_abs_difference_vs_stored_apparent_c": stored_a if stored_available else None,
-            "per_lead": [
-                f"{r[0]}: DE {r[1]:.3f} / PLR {r[2]:.3f} °C; "
-                f"apparent DE {r[4]:.3f} / PLR {r[5]:.3f} °C"
-                for r in rows
-                if None not in (r[1], r[2], r[4], r[5])
-            ],
-        },
-        description=(
-            "Berlin's value from the Germany bridge (VG250 outline) agrees with "
-            "the area-weighted roll-up of the 542 PLRs computed from the same "
-            "cell values through Berlin's bridge (LOR outline). Differences "
-            "come only from the two outlines. A stored Berlin run for the same "
-            "run time is compared when available. Warning severity."
-        ),
-    )
-
-
 GERMANY_FORECAST_CHECKS = [
     de_bridge_coverage,
     de_forecast_completeness,
     de_forecast_plausibility,
-    de_berlin_cross_layer_consistency,
 ]

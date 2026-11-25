@@ -8,7 +8,7 @@ Each lead time is one Dagster partition of the `germany_forecast` job
 (the four shared raw DWD fields plus the Germany aggregation). Partitions
 already complete for every Gemeinde are skipped. Afterwards the
 `germany_forecast_publish` job publishes the run, applies retention and
-runs checks 5-7. The Berlin pipeline and its sensor are not involved.
+runs checks 5-6. The Berlin pipeline and its sensor are not involved.
 """
 
 import argparse
