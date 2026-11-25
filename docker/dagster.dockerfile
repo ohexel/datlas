@@ -10,9 +10,11 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/datlas-venv \
     PYTHONUNBUFFERED=1 \
     PATH="/opt/datlas-venv/bin:${PATH}"
 
+# tippecanoe builds the map's boundary tiles once per geography version.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libstdc++6 \
-    && rm -rf /var/lib/apt/lists/*
+    && apt-get install -y --no-install-recommends libstdc++6 tippecanoe \
+    && rm -rf /var/lib/apt/lists/* \
+    && tippecanoe --version
 
 WORKDIR /app
 

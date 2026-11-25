@@ -21,12 +21,19 @@ from src.dagster_pipeline.assets.forecast import (
 )
 from src.dagster_pipeline.assets.normalized import NORMALIZED_ASSETS
 from src.dagster_pipeline.assets.raw import RAW_ASSETS
+from src.dagster_pipeline.assets.dashboard import web_germany_dashboard
 from src.dagster_pipeline.assets.database_spatial import SPATIAL_ASSETS
 from src.dagster_pipeline.assets.icon_d2_ruc import RAW_ICON_D2_RUC_ASSETS
 
 
+# docker/dagster.yaml stops any run after 300 s, which fits the forecast jobs.
+# The static build (4 min from an empty database) and the BA loads (downloads
+# with rate limits) get 30 minutes.
+LONG_RUN_TAGS = {"dagster/max_runtime": "1800"}
+
 STATIC_JOB = dg.define_asset_job(
     name="static",
+    tags=LONG_RUN_TAGS,
     selection=dg.AssetSelection.assets(
         *SPATIAL_ASSETS,
         *RAW_ASSETS,
@@ -46,6 +53,9 @@ FORECAST_JOB = dg.define_asset_job(
         *RAW_ICON_D2_RUC_ASSETS,
         normalized_gemeinde_forecast,
     ),
+    # One process per run: the sensor launches up to ten partitions per tick,
+    # and a subprocess per step only adds start-up time (capstone PR #21).
+    executor_def=dg.in_process_executor,
     description=(
         "One forecast partition: the four raw DWD fields (GRIB files) and "
         "the cell and Gemeinde aggregation."
@@ -54,15 +64,20 @@ FORECAST_JOB = dg.define_asset_job(
 
 PUBLISH_JOB = dg.define_asset_job(
     name="forecast_publish",
-    selection=dg.AssetSelection.assets(analytical_current_forecast_25h),
+    selection=dg.AssetSelection.assets(
+        analytical_current_forecast_25h,
+        web_germany_dashboard,
+    ),
+    executor_def=dg.in_process_executor,
     description=(
-        "Publish the current complete Germany run, apply retention and run "
-        "checks 5-6."
+        "Publish the current complete run, apply retention, run checks 5-6 "
+        "and export the map's data files."
     ),
 )
 
 EMPLOYMENT_JOB = dg.define_asset_job(
     name="employment",
+    tags=LONG_RUN_TAGS,
     selection=dg.AssetSelection.assets(*EMPLOYMENT_ASSETS),
     description=(
         "Acquire one vintage of the BA Gemeindedaten (run config: reference "
@@ -85,6 +100,7 @@ def employment_run_config(reference_date: date) -> dict:
 
 SECTORS_JOB = dg.define_asset_job(
     name="sectors",
+    tags=LONG_RUN_TAGS,
     selection=dg.AssetSelection.assets(*SECTOR_ASSETS),
     description=(
         "Download one quarter of the BA sector data (run config: file date): "

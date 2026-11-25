@@ -28,6 +28,7 @@ def test_dagster_image_keeps_locked_dependencies_outside_project_mount() -> None
     assert 'PATH="/opt/datlas-venv/bin:${PATH}"' in dockerfile
     assert "COPY pyproject.toml uv.lock README.md ./" in dockerfile
     assert "uv sync --frozen --no-install-project --no-dev" in dockerfile
+    assert "tippecanoe" in dockerfile
 
 
 def test_dagster_image_build_excludes_large_project_inputs() -> None:

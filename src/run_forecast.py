@@ -22,7 +22,7 @@ from typing import Callable
 import requests
 
 from src.dagster_home import ensure_dagster_home, execute_job
-from src.database.connection import database_connection
+from src.database.forecast import partition_complete
 from src.dagster_pipeline.partitions import (
     WEATHER_LEAD_TIMES,
     weather_partition_key,
@@ -38,7 +38,6 @@ from src.forecast_key import (
     RUN_LABEL_FORMAT,
     parse_lead_time,
 )
-from src.ingestion.contract import GEOGRAPHY_VERSION
 from src.retention.forecast_policy import (
     forecast_partition_window_start,
     forecast_retention_hours,
@@ -137,24 +136,6 @@ def parse_forecast_request(
         run_time=run_time,
         lead_time=parse_lead_time(lead_time_label),
     )
-
-
-def partition_complete(forecast) -> bool:
-    with database_connection(application_name="datlas_run_state") as connection:
-        row = connection.execute(
-            """
-            SELECT
-                (SELECT COUNT(*) FROM normalized.gemeinde_forecast
-                 WHERE run_time_utc = %s AND lead_time = %s
-                   AND geography_version = %s
-                   AND temperature_c IS NOT NULL
-                   AND apparent_temperature_shade_c IS NOT NULL),
-                (SELECT COUNT(*) FROM normalized.gemeinde
-                 WHERE geography_version = %s)
-            """,
-            (forecast.run_time, forecast.lead_time_label, GEOGRAPHY_VERSION, GEOGRAPHY_VERSION),
-        ).fetchone()
-    return row is not None and row[1] > 0 and row[0] == row[1]
 
 
 def run_forecast(

@@ -8,6 +8,7 @@ values and area-weights them to Gemeinden
 """
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from time import perf_counter
 
@@ -66,6 +67,45 @@ def load_cell_indices(
             "normalized/icon_gemeinde_bridge first"
         )
     return cells
+
+
+def partition_complete(
+    forecast: ForecastKey,
+    geography_version: str = GEOGRAPHY_VERSION,
+) -> bool:
+    """True when every Gemeinde has both values for this run and lead time."""
+    with database_connection(application_name="datlas_partition_state") as connection:
+        row = connection.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM normalized.gemeinde_forecast
+                 WHERE run_time_utc = %s AND lead_time = %s
+                   AND geography_version = %s
+                   AND temperature_c IS NOT NULL
+                   AND apparent_temperature_shade_c IS NOT NULL),
+                (SELECT COUNT(*) FROM normalized.gemeinde
+                 WHERE geography_version = %s)
+            """,
+            (forecast.run_time, forecast.lead_time_label, geography_version, geography_version),
+        ).fetchone()
+    return row is not None and row[1] > 0 and row[0] == row[1]
+
+
+def newest_complete_run(
+    connection: Connection,
+    geography_version: str = GEOGRAPHY_VERSION,
+) -> datetime | None:
+    """The newest run with all 25 lead times for every Gemeinde, if any."""
+    row = connection.execute(
+        """
+        SELECT run_time_utc FROM normalized.forecast_run_completeness
+        WHERE geography_version = %s AND is_complete
+        ORDER BY run_time_utc DESC
+        LIMIT 1
+        """,
+        (geography_version,),
+    ).fetchone()
+    return None if row is None else row[0]
 
 
 @dataclass

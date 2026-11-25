@@ -1,5 +1,6 @@
 import dagster as dg
 
+from src.dagster_pipeline.assets.dashboard import DASHBOARD_ASSETS
 from src.dagster_pipeline.assets.database_spatial import SPATIAL_ASSETS
 from src.dagster_pipeline.assets.employment import (
     EMPLOYMENT_ASSETS,
@@ -30,6 +31,8 @@ from src.dagster_pipeline.sensors.ba_gemeindedaten import (
     ba_gemeindedaten_release_sensor,
 )
 from src.dagster_pipeline.sensors.ba_sectors import ba_sectors_release_sensor
+from src.dagster_pipeline.sensors.dwd_forecast import dwd_forecast_availability_sensor
+from src.dagster_pipeline.sensors.forecast_publish import forecast_publish_sensor
 
 
 defs = dg.Definitions(
@@ -39,6 +42,7 @@ defs = dg.Definitions(
         *RAW_ASSETS,
         *NORMALIZED_ASSETS,
         *FORECAST_ASSETS,
+        *DASHBOARD_ASSETS,
         *EMPLOYMENT_ASSETS,
         *SECTOR_ASSETS,
     ],
@@ -52,6 +56,8 @@ defs = dg.Definitions(
     ],
     jobs=[*JOBS],
     sensors=[
+        dwd_forecast_availability_sensor,
+        forecast_publish_sensor,
         ba_gemeindedaten_release_sensor,
         ba_sectors_release_sensor,
     ],

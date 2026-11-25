@@ -21,6 +21,7 @@ GROUPS = {
         "raw_icon_v_10m",
         "normalized/gemeinde_forecast",
         "analytical/current_forecast_25h",
+        "web/germany_dashboard",
     },
     "employment": {"raw/ba_gemeindedaten", "normalized/indicator_value"},
     "sectors": {"raw/ba_regionalreport", "raw/ba_wz_heft", "normalized/sector_values"},
@@ -70,3 +71,18 @@ def test_each_group_holds_one_theme_and_its_jobs_run_exactly_it() -> None:
 def test_all_checks_are_registered() -> None:
     graph = defs.resolve_asset_graph()
     assert {key.name for key in graph.asset_check_keys} == CHECKS
+
+
+def test_only_the_forecast_jobs_keep_the_300_second_limit() -> None:
+    limits = {
+        name: defs.resolve_job_def(name).tags.get("dagster/max_runtime")
+        for names in JOBS.values()
+        for name in names
+    }
+    assert limits == {
+        "static": "1800",
+        "forecast": None,
+        "forecast_publish": None,
+        "employment": "1800",
+        "sectors": "1800",
+    }
