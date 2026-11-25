@@ -23,7 +23,7 @@ in [facts.md](facts.md).
 ```bash
 git clone https://github.com/ohexel/datlas.git
 cd datlas
-cp .env.example .env              # set POSTGRES_PASSWORD; ZENSUS2022_TOKEN if needed
+cp .env.example .env              # set POSTGRES_PASSWORD, DAGSTER_UID/GID; ZENSUS2022_TOKEN if needed
 uv sync --frozen
 docker compose --env-file .env -f docker/postgres.yml up -d
 ```
@@ -42,9 +42,12 @@ In a container (recommended), with the interface, the daemon that runs the
 sensors, and the run limits of `docker/dagster.yaml`:
 
 ```bash
-export DAGSTER_UID="$(id -u)" DAGSTER_GID="$(id -g)"   # files in the checkout stay yours
 docker compose --env-file .env -f docker/postgres.yml -f docker/dagster.yml up -d --build
 ```
+
+The container runs as `DAGSTER_UID`:`DAGSTER_GID` from `.env`, which must be
+your user and group (`id -u`, `id -g`): it writes its run storage to
+`.dagster_home/` and the map files to `web/` in the checkout.
 
 The interface is at <http://127.0.0.1:3001> (`DAGSTER_PORT`). The container
 mounts the checkout at `/app`, so it shares the code, `data/`, `web/` and
@@ -246,6 +249,7 @@ uv run --env-file .env python -m pytest -m acceptance
 | Requested forecast run unavailable | Run is unpublished, incomplete, older than about 24 hours, or entered in local time. | Choose another UTC run. |
 | A forecast partition fails to decode | A GRIB file is broken; a note is under `data/raw/quarantine/icon_d2_ruc/`. | The sensor retries up to five attempts; the views keep serving the previous complete run. |
 | Check 5 (`forecast_completeness`) warns | A newer run was loaded but never completed, e.g. a failed download or a model field with missing values. | Nothing; the next complete run replaces it. |
+| The Dagster container restarts in a loop | It runs as a user that cannot write `.dagster_home/` (wrong `DAGSTER_UID`/`DAGSTER_GID`, or the folder was created by Docker as root). | Set both in `.env` to `id -u` and `id -g`; if `.dagster_home` belongs to root, `sudo chown -R "$(id -u):$(id -g)" .dagster_home`; then `up -d` again. |
 | Runs stay queued | Two runs at a time (`docker/dagster.yaml`); the sensor queues up to ten partitions per check. | Wait; each partition takes a few seconds. |
 | `run_sectors` exits with status 2 | The BA throttled the downloads; a cool-down is in force. | Run the same command again after the time it prints. |
 | Check 10 (`ba_key_coverage`) fails on a new vintage | The BA's territorial status changed. | Review the changes and add them to `src/ingestion/contract.py`. |

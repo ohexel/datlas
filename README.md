@@ -67,7 +67,7 @@ while the Zensus files are not yet under `data/raw/germany/`.
 
 ```bash
 git clone https://github.com/ohexel/datlas.git && cd datlas
-cp .env.example .env            # set POSTGRES_PASSWORD; ZENSUS2022_TOKEN if needed
+cp .env.example .env            # set POSTGRES_PASSWORD, DAGSTER_UID/GID (id -u, id -g); ZENSUS2022_TOKEN if needed
 uv sync --frozen
 
 # PostgreSQL/PostGIS (127.0.0.1:5433) and Dagster (http://127.0.0.1:3001)
