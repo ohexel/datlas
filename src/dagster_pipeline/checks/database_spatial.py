@@ -15,9 +15,7 @@ from src.icon_grid_contract import (
     additional_deps=[RAW_ICON_GRID_KEY],
     name="icon_cell_geometry_quality",
 )
-def icon_cell_geometry_quality(
-    context: dg.AssetCheckExecutionContext,
-) -> dg.AssetCheckResult:
+def icon_cell_geometry_quality() -> dg.AssetCheckResult:
     with database_connection(
         application_name="datlas_icon_geometry_check"
     ) as connection:

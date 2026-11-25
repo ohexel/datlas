@@ -32,17 +32,26 @@ def _all(sql: str, params: tuple | dict = ()) -> list[tuple]:
 
 
 def test_all_checks_pass_on_installed_data() -> None:
+    from src.dagster_pipeline.checks.database_spatial import SPATIAL_CHECKS
     from src.dagster_pipeline.checks.employment import EMPLOYMENT_CHECKS
     from src.dagster_pipeline.checks.forecast import FORECAST_CHECKS
     from src.dagster_pipeline.checks.normalized import NORMALIZED_CHECKS
+    from src.dagster_pipeline.checks.raw import RAW_CHECKS
     from src.dagster_pipeline.checks.sectors import SECTOR_CHECKS
+    from src.dagster_pipeline.definitions import defs
 
-    for check in (
+    checks = (
+        *SPATIAL_CHECKS,
+        *RAW_CHECKS,
         *NORMALIZED_CHECKS,
         *FORECAST_CHECKS,
         *EMPLOYMENT_CHECKS,
         *SECTOR_CHECKS,
-    ):
+    )
+    registered = {key.name for key in defs.resolve_asset_graph().asset_check_keys}
+    assert {check.check_key.name for check in checks} == registered
+
+    for check in checks:
         result = check.node_def.compute_fn.decorated_fn()
         assert result.passed, (check.check_key.name, result.metadata)
 

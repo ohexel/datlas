@@ -1,6 +1,6 @@
 """Classify existing tests without moving files or weakening their assertions.
 
-The Germany test modules set their own markers.
+Modules not listed here set their own markers.
 """
 
 from pathlib import Path
