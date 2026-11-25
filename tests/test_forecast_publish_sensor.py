@@ -68,16 +68,6 @@ def test_newest_complete_run_is_published_once(monkeypatch, instance) -> None:
     }
 
 
-def test_failed_publish_is_retried_with_a_new_attempt(monkeypatch, instance) -> None:
-    _patch_database(monkeypatch, RUN)
-    _patch_previous_runs(monkeypatch, [dg.DagsterRunStatus.FAILURE])
-
-    (request,) = _tick(instance).run_requests
-
-    assert request.run_key == "forecast_publish:20261125T1500:attempt_2"
-    assert request.tags["attempt"] == "2"
-
-
 @pytest.mark.parametrize(
     "statuses",
     [

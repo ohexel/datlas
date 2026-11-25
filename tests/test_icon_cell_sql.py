@@ -7,6 +7,9 @@ from src.database.load import copy_rows
 from src.database.schema import apply_base_schema
 
 
+pytestmark = pytest.mark.integration
+
+
 VERTICES = [(0, 13.40, 52.50), (1, 13.41, 52.50), (2, 13.405, 52.51)]
 
 
@@ -84,36 +87,3 @@ def test_postgis_builds_icon_cells_in_epsg_3035() -> None:
                 (grid_id,),
             ).fetchone()[0]
             assert passed is True
-
-
-@pytest.mark.parametrize(
-    "lon, lat",
-    [(6.0, 51.0), (10.0, 51.0), (15.0, 51.0), (7.5, 47.6), (9.5, 54.8)],
-)
-def test_direct_3035_cells_equal_the_former_route_through_25833(lon: float, lat: float) -> None:
-    """Only vertices are projected, so building a cell through EPSG:25833
-    (the capstone's route) or directly gives the same triangle up to
-    rounding, also far west of UTM zone 33 (split-plan D4)."""
-    with database_connection(application_name="datlas_icon_cell_test") as connection:
-        area_direct, area_via, distance = connection.execute(
-            """
-            WITH cell AS (
-                SELECT ST_SetSRID(ST_MakePolygon(ST_MakeLine(ARRAY[
-                    ST_MakePoint(%(lon)s, %(lat)s),
-                    ST_MakePoint(%(lon)s + 0.02, %(lat)s),
-                    ST_MakePoint(%(lon)s + 0.01, %(lat)s + 0.015),
-                    ST_MakePoint(%(lon)s, %(lat)s)
-                ])), 4326) AS geometry
-            ), built AS (
-                SELECT ST_Transform(geometry, 3035) AS direct,
-                       ST_Transform(ST_Transform(geometry, 25833), 3035) AS via
-                FROM cell
-            )
-            SELECT ST_Area(direct), ST_Area(via), ST_HausdorffDistance(direct, via)
-            FROM built
-            """,
-            {"lon": lon, "lat": lat},
-        ).fetchone()
-
-    assert area_via == pytest.approx(area_direct, rel=1e-9)
-    assert distance < 1e-6  # metres

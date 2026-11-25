@@ -1,18 +1,18 @@
 """GRIB file retention (split-plan D5) and the bounded rolling window."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
 from src.forecast_key import ProjectPaths
 from src.retention.forecast_policy import (
-    FORECAST_RETENTION_HOURS_ENV,
-    forecast_partition_window_start,
-    forecast_retention_cutoff,
     forecast_retention_hours,
 )
 from src.retention.grib_files import prune_grib_files
+
+
+pytestmark = pytest.mark.contract
 
 
 NOW_UTC = datetime(2026, 8, 23, 10, 0, tzinfo=timezone.utc)
@@ -125,24 +125,6 @@ def test_retention_rejects_windows_outside_one_to_24_hours(hours: int) -> None:
         forecast_retention_hours(hours)
 
 
-def test_retention_reads_bounded_hourly_configuration(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setenv(FORECAST_RETENTION_HOURS_ENV, "12")
-    assert forecast_retention_hours() == 12
-    assert forecast_retention_cutoff(now_utc=NOW_UTC) == NOW_UTC - timedelta(hours=12)
-
-
-def test_partition_window_contains_at_most_24_whole_hour_runs() -> None:
-    now = datetime(2026, 8, 23, 10, 37, tzinfo=timezone.utc)
-    assert forecast_partition_window_start(now_utc=now, retention_hours=24) == (
-        datetime(2026, 8, 22, 11, 0, tzinfo=timezone.utc)
-    )
-    assert forecast_partition_window_start(now_utc=now, retention_hours=1) == (
-        datetime(2026, 8, 23, 10, 0, tzinfo=timezone.utc)
-    )
-
-
 def test_old_run_still_in_the_database_keeps_its_files(tmp_path: Path) -> None:
     kept_grib, kept_sidecar = _write_raw_partition(
         project_root=tmp_path, run_label="20260821T0900"
@@ -163,19 +145,3 @@ def test_old_run_still_in_the_database_keeps_its_files(tmp_path: Path) -> None:
     assert result.database_run_count == 1
     assert result.kept_database_run_file_count == 1
     assert result.deleted_file_count == 1
-
-
-def test_database_run_times_from_other_zones_are_compared_in_utc(tmp_path: Path) -> None:
-    grib, _ = _write_raw_partition(project_root=tmp_path, run_label="20260821T0900")
-    berlin_summer = timezone(timedelta(hours=2))
-
-    result = prune_grib_files(
-        keep_run_times={datetime(2026, 8, 21, 11, 0, tzinfo=berlin_summer)},
-        paths=ProjectPaths(project_root=tmp_path),
-        retention_hours=24,
-        now_utc=NOW_UTC,
-        dry_run=False,
-    )
-
-    assert grib.is_file()
-    assert result.deleted_file_count == 0

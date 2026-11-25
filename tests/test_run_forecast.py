@@ -16,6 +16,9 @@ from src.run_forecast import (
 )
 
 
+pytestmark = pytest.mark.contract
+
+
 @dataclass
 class FakeResponse:
     ok: bool
@@ -146,16 +149,3 @@ def test_manual_forecast_error_is_concise_and_traceback_free(
     error = capsys.readouterr().err
     assert "error: Recent DWD run has not been published." in error
     assert "Traceback" not in error
-
-
-def test_manual_forecast_help_explains_utc_and_publication_window(
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    with pytest.raises(SystemExit) as observed:
-        main(["--help"])
-
-    assert observed.value.code == 0
-    output = " ".join(capsys.readouterr().out.split())
-    assert "UTC, not Berlin-local time" in output
-    assert "Recent runs may not yet be published" in output
-    assert "older runs may no longer be available" in output

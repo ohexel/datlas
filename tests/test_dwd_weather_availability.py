@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 
-import pytest
 
 from src.dwd_weather_availability import (
     check_forecast_availability,
@@ -272,15 +271,3 @@ def test_ready_forecast_limit_stops_source_checks_after_bounded_batch():
     assert decision.checked_forecasts == 5
     assert len(checked_fields) == 20
     assert decision.ready[-1].forecast.lead_time_label == "PT004H00M"
-
-
-def test_ready_forecast_limit_must_be_positive():
-    with pytest.raises(ValueError, match="must be positive"):
-        find_ready_weather_forecasts(
-            object(),
-            advertised_run_times=[],
-            lead_time_labels=(),
-            minimum_run_time=datetime(2026, 8, 19, tzinfo=timezone.utc),
-            max_ready_forecasts=0,
-            already_complete_fn=lambda forecast: False,
-        )

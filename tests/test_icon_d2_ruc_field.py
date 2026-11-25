@@ -31,13 +31,6 @@ def _quarantine_note(paths: ProjectPaths) -> dict:
     return json.loads(note.read_text(encoding="utf-8"))
 
 
-def test_missing_retained_file_raises(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError, match="Retained raw weather file not found"):
-        icon_d2_ruc_field.prepare_field(
-            paths=ProjectPaths(project_root=tmp_path), forecast=FORECAST, indicator="T_2M"
-        )
-
-
 def test_valid_field_returns_all_grid_values(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

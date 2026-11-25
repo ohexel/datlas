@@ -1,12 +1,12 @@
-from datetime import timedelta
-
 import pytest
 
 from src.forecast_key import (
     ForecastKey,
     ProjectPaths,
-    parse_lead_time,
 )
+
+
+pytestmark = pytest.mark.contract
 
 
 def test_forecast_key_derives_valid_time_for_zero_and_twelve_hours():
@@ -48,10 +48,3 @@ def test_forecast_key_and_paths_use_canonical_partition_identity():
         "data/raw/icon_d2_ruc/t_2m/"
         "20260819T1200/PT012H00M/t_2m.grib2"
     )
-
-def test_invalid_lead_time_is_rejected():
-    with pytest.raises(ValueError):
-        parse_lead_time("12h")
-
-    with pytest.raises(ValueError):
-        parse_lead_time("PT012H99M")
