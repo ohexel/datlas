@@ -4,7 +4,7 @@ The four raw indicators of all Germany cells are staged in a temporary table.
 PostgreSQL converts units, computes shade apparent temperature with Berlin's
 function normalized.calculate_apparent_temperature_shade_c, stores the cell
 values and area-weights them to Gemeinden
-(normalized.refresh_de_forecast_partition). Why SQL and not numpy: ADR 018.
+(normalized.refresh_forecast_partition). Why SQL and not numpy: ADR 018.
 """
 
 from dataclasses import dataclass, field
@@ -51,7 +51,7 @@ def load_cell_indices(
             for row in connection.execute(
                 """
                 SELECT DISTINCT cell_index
-                FROM normalized.de_icon_cell_gemeinde_bridge
+                FROM normalized.icon_cell_gemeinde_bridge
                 WHERE geography_version = %s AND source_grid_id = %s
                 ORDER BY cell_index
                 """,
@@ -63,7 +63,7 @@ def load_cell_indices(
     if cells.size == 0:
         raise RuntimeError(
             "Cell-Gemeinde bridge is empty; materialize "
-            "normalized/de_icon_gemeinde_bridge first"
+            "normalized/icon_gemeinde_bridge first"
         )
     return cells
 
@@ -124,7 +124,7 @@ def process_partition(
         started = perf_counter()
         connection.execute(
             """
-            CREATE TEMP TABLE de_cell_stage (
+            CREATE TEMP TABLE cell_stage (
                 cell_index integer PRIMARY KEY,
                 temperature_k double precision,
                 relative_humidity_percent double precision,
@@ -136,7 +136,7 @@ def process_partition(
         copy_rows(
             connection,
             schema="pg_temp",
-            table="de_cell_stage",
+            table="cell_stage",
             columns=("cell_index", *INDICATOR_COLUMNS.values()),
             rows=(
                 (
@@ -150,7 +150,7 @@ def process_partition(
 
         started = perf_counter()
         counts = connection.execute(
-            "SELECT * FROM normalized.refresh_de_forecast_partition(%s, %s, %s, %s, %s)",
+            "SELECT * FROM normalized.refresh_forecast_partition(%s, %s, %s, %s, %s)",
             (
                 forecast.run_time,
                 forecast.lead_time_label,

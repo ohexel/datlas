@@ -1,11 +1,10 @@
--- Germany layer, normalized: administrative hierarchy and population.
--- Additive and idempotent: only de_-prefixed objects, no Berlin object is
--- touched. Geometry is EPSG:3035 (ETRS89-LAEA, equal-area), see D4.
+-- Normalized administrative hierarchy and population. Idempotent; requires
+-- raw_schema.sql. Geometry is EPSG:3035 (ETRS89-LAEA, equal-area).
 
 -- ---------------------------------------------------------------------------
 -- Hierarchy
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS normalized.de_land (
+CREATE TABLE IF NOT EXISTS normalized.land (
     geography_version text NOT NULL,
     land_key text NOT NULL CHECK (land_key ~ '^[0-9]{2}$'),
     land_name text NOT NULL,
@@ -15,7 +14,7 @@ CREATE TABLE IF NOT EXISTS normalized.de_land (
     PRIMARY KEY (geography_version, land_key)
 );
 
-CREATE TABLE IF NOT EXISTS normalized.de_kreis (
+CREATE TABLE IF NOT EXISTS normalized.kreis (
     geography_version text NOT NULL,
     kreis_key text NOT NULL CHECK (kreis_key ~ '^[0-9]{5}$'),
     land_key text NOT NULL,
@@ -27,11 +26,11 @@ CREATE TABLE IF NOT EXISTS normalized.de_kreis (
     source_sha256 text NOT NULL,
     PRIMARY KEY (geography_version, kreis_key),
     FOREIGN KEY (geography_version, land_key)
-        REFERENCES normalized.de_land (geography_version, land_key),
+        REFERENCES normalized.land (geography_version, land_key),
     CHECK (left(kreis_key, 2) = land_key)
 );
 
-CREATE TABLE IF NOT EXISTS normalized.de_gemeinde (
+CREATE TABLE IF NOT EXISTS normalized.gemeinde (
     geography_version text NOT NULL,
     ars text NOT NULL CHECK (ars ~ '^[0-9]{12}$'),
     ags text NOT NULL CHECK (ags ~ '^[0-9]{8}$'),
@@ -46,17 +45,17 @@ CREATE TABLE IF NOT EXISTS normalized.de_gemeinde (
     PRIMARY KEY (geography_version, ars),
     UNIQUE (geography_version, ags),
     FOREIGN KEY (geography_version, kreis_key)
-        REFERENCES normalized.de_kreis (geography_version, kreis_key),
+        REFERENCES normalized.kreis (geography_version, kreis_key),
     FOREIGN KEY (geography_version, land_key)
-        REFERENCES normalized.de_land (geography_version, land_key),
+        REFERENCES normalized.land (geography_version, land_key),
     CHECK (left(ars, 5) = kreis_key),
     CHECK (left(ars, 2) = land_key)
 );
 
-CREATE INDEX IF NOT EXISTS de_gemeinde_kreis_idx
-    ON normalized.de_gemeinde (geography_version, kreis_key);
-CREATE INDEX IF NOT EXISTS de_gemeinde_geometry_idx
-    ON normalized.de_gemeinde USING gist (geometry);
+CREATE INDEX IF NOT EXISTS gemeinde_kreis_idx
+    ON normalized.gemeinde (geography_version, kreis_key);
+CREATE INDEX IF NOT EXISTS gemeinde_geometry_idx
+    ON normalized.gemeinde USING gist (geometry);
 
 -- ---------------------------------------------------------------------------
 -- Population (Zensus 2022 total population, reference date 2022-05-15)
@@ -66,7 +65,7 @@ CREATE INDEX IF NOT EXISTS de_gemeinde_geometry_idx
 -- future extracts or tables may contain it. Kept so that such a value is
 -- stored as 0 with this flag, not as NULL.
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS normalized.de_gemeinde_population (
+CREATE TABLE IF NOT EXISTS normalized.gemeinde_population (
     geography_version text NOT NULL,
     ars text NOT NULL,
     population_total integer CHECK (population_total >= 0),
@@ -85,7 +84,7 @@ CREATE TABLE IF NOT EXISTS normalized.de_gemeinde_population (
     source_sha256 text NOT NULL,
     PRIMARY KEY (geography_version, ars),
     FOREIGN KEY (geography_version, ars)
-        REFERENCES normalized.de_gemeinde (geography_version, ars),
+        REFERENCES normalized.gemeinde (geography_version, ars),
     CHECK (
         (population_status IN ('census_value', 'census_zero_or_set_to_zero'))
         = (population_total IS NOT NULL)
@@ -93,7 +92,7 @@ CREATE TABLE IF NOT EXISTS normalized.de_gemeinde_population (
 );
 
 -- Published totals at every level, kept for the source-total checks.
-CREATE TABLE IF NOT EXISTS normalized.de_zensus_published_population (
+CREATE TABLE IF NOT EXISTS normalized.zensus_published_population (
     level text NOT NULL CHECK (level IN ('sta', 'lan', 'krs', 'gem')),
     region_key text NOT NULL,
     region_name text NOT NULL,
@@ -108,7 +107,7 @@ CREATE TABLE IF NOT EXISTS normalized.de_zensus_published_population (
 -- ---------------------------------------------------------------------------
 -- Refresh: hierarchy from VG250 land parts (GF = 4)
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.de_to_3035_multipolygon(
+CREATE OR REPLACE FUNCTION normalized.to_3035_multipolygon(
     p_geometry public.geometry
 ) RETURNS public.geometry
     LANGUAGE sql IMMUTABLE
@@ -121,7 +120,7 @@ CREATE OR REPLACE FUNCTION normalized.de_to_3035_multipolygon(
     )::public.geometry(MultiPolygon, 3035)
 $$;
 
-CREATE OR REPLACE FUNCTION normalized.refresh_de_hierarchy(
+CREATE OR REPLACE FUNCTION normalized.refresh_hierarchy(
     p_source_sha256 text,
     p_geography_version text
 ) RETURNS TABLE(
@@ -134,7 +133,7 @@ CREATE OR REPLACE FUNCTION normalized.refresh_de_hierarchy(
     AS $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM raw.de_vg250 WHERE source_sha256 = p_source_sha256
+        SELECT 1 FROM raw.vg250 WHERE source_sha256 = p_source_sha256
     ) THEN
         RAISE EXCEPTION 'No raw VG250 rows for source_sha256=%', p_source_sha256;
     END IF;
@@ -143,11 +142,11 @@ BEGIN
     -- Gemeinden, so it is never deleted and rebuilt in place: the same VG250 file
     -- gives the same hierarchy (no-op); another file needs a new geography_version.
     IF EXISTS (
-        SELECT 1 FROM normalized.de_gemeinde
+        SELECT 1 FROM normalized.gemeinde
         WHERE geography_version = p_geography_version
     ) THEN
         IF EXISTS (
-            SELECT 1 FROM normalized.de_gemeinde
+            SELECT 1 FROM normalized.gemeinde
             WHERE geography_version = p_geography_version
               AND source_sha256 <> p_source_sha256
         ) THEN
@@ -160,28 +159,28 @@ BEGIN
             p_geography_version;
         RETURN QUERY
         SELECT
-            (SELECT COUNT(*) FROM normalized.de_land
+            (SELECT COUNT(*) FROM normalized.land
              WHERE geography_version = p_geography_version),
-            (SELECT COUNT(*) FROM normalized.de_kreis
+            (SELECT COUNT(*) FROM normalized.kreis
              WHERE geography_version = p_geography_version),
-            (SELECT COUNT(*) FROM normalized.de_gemeinde
+            (SELECT COUNT(*) FROM normalized.gemeinde
              WHERE geography_version = p_geography_version),
-            (SELECT COUNT(*) FROM normalized.de_gemeinde
+            (SELECT COUNT(*) FROM normalized.gemeinde
              WHERE geography_version = p_geography_version
                AND is_unincorporated);
         RETURN;
     END IF;
 
-    DELETE FROM normalized.de_gemeinde_population
+    DELETE FROM normalized.gemeinde_population
     WHERE geography_version = p_geography_version;
-    DELETE FROM normalized.de_gemeinde
+    DELETE FROM normalized.gemeinde
     WHERE geography_version = p_geography_version;
-    DELETE FROM normalized.de_kreis
+    DELETE FROM normalized.kreis
     WHERE geography_version = p_geography_version;
-    DELETE FROM normalized.de_land
+    DELETE FROM normalized.land
     WHERE geography_version = p_geography_version;
 
-    INSERT INTO normalized.de_land
+    INSERT INTO normalized.land
     SELECT
         p_geography_version,
         raw_row.ars,
@@ -189,16 +188,16 @@ BEGIN
         geometry_3035,
         public.ST_Area(geometry_3035),
         p_source_sha256
-    FROM raw.de_vg250 AS raw_row
+    FROM raw.vg250 AS raw_row
     CROSS JOIN LATERAL (
-        SELECT normalized.de_to_3035_multipolygon(raw_row.geometry_source)
+        SELECT normalized.to_3035_multipolygon(raw_row.geometry_source)
             AS geometry_3035
     ) AS transformed
     WHERE raw_row.source_sha256 = p_source_sha256
       AND raw_row.level = 'lan'
       AND raw_row.gf = 4;
 
-    INSERT INTO normalized.de_kreis
+    INSERT INTO normalized.kreis
     SELECT
         p_geography_version,
         raw_row.ars,
@@ -209,16 +208,16 @@ BEGIN
         geometry_3035,
         public.ST_Area(geometry_3035),
         p_source_sha256
-    FROM raw.de_vg250 AS raw_row
+    FROM raw.vg250 AS raw_row
     CROSS JOIN LATERAL (
-        SELECT normalized.de_to_3035_multipolygon(raw_row.geometry_source)
+        SELECT normalized.to_3035_multipolygon(raw_row.geometry_source)
             AS geometry_3035
     ) AS transformed
     WHERE raw_row.source_sha256 = p_source_sha256
       AND raw_row.level = 'krs'
       AND raw_row.gf = 4;
 
-    INSERT INTO normalized.de_gemeinde
+    INSERT INTO normalized.gemeinde
     SELECT
         p_geography_version,
         raw_row.ars,
@@ -231,9 +230,9 @@ BEGIN
         geometry_3035,
         public.ST_Area(geometry_3035),
         p_source_sha256
-    FROM raw.de_vg250 AS raw_row
+    FROM raw.vg250 AS raw_row
     CROSS JOIN LATERAL (
-        SELECT normalized.de_to_3035_multipolygon(raw_row.geometry_source)
+        SELECT normalized.to_3035_multipolygon(raw_row.geometry_source)
             AS geometry_3035
     ) AS transformed
     WHERE raw_row.source_sha256 = p_source_sha256
@@ -242,13 +241,13 @@ BEGIN
 
     RETURN QUERY
     SELECT
-        (SELECT COUNT(*) FROM normalized.de_land
+        (SELECT COUNT(*) FROM normalized.land
          WHERE geography_version = p_geography_version),
-        (SELECT COUNT(*) FROM normalized.de_kreis
+        (SELECT COUNT(*) FROM normalized.kreis
          WHERE geography_version = p_geography_version),
-        (SELECT COUNT(*) FROM normalized.de_gemeinde
+        (SELECT COUNT(*) FROM normalized.gemeinde
          WHERE geography_version = p_geography_version),
-        (SELECT COUNT(*) FROM normalized.de_gemeinde
+        (SELECT COUNT(*) FROM normalized.gemeinde
          WHERE geography_version = p_geography_version
            AND is_unincorporated);
 END;
@@ -258,7 +257,7 @@ $$;
 -- Refresh: population from the Zensus total rows (no age class)
 -- '-' means "Genau Null oder auf Null geändert" (see docs/data-sources.md).
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.de_zensus_total_rows(
+CREATE OR REPLACE FUNCTION normalized.zensus_total_rows(
     p_source_sha256s text[]
 ) RETURNS TABLE(
     level text,
@@ -287,7 +286,7 @@ CREATE OR REPLACE FUNCTION normalized.de_zensus_total_rows(
         END,
         raw_row.table_code,
         raw_row.source_sha256
-    FROM raw.de_zensus2022_population AS raw_row
+    FROM raw.zensus2022_population AS raw_row
     WHERE raw_row.source_sha256 = ANY(p_source_sha256s)
       AND raw_row.variable_2_attribute_code IS NULL
       AND raw_row.value_unit = 'Anzahl'
@@ -295,7 +294,7 @@ CREATE OR REPLACE FUNCTION normalized.de_zensus_total_rows(
     ORDER BY 1, 2, raw_row.source_sha256
 $$;
 
-CREATE OR REPLACE FUNCTION normalized.refresh_de_population(
+CREATE OR REPLACE FUNCTION normalized.refresh_population(
     p_geography_version text,
     p_source_sha256s text[],
     p_reference_date date
@@ -312,7 +311,7 @@ CREATE OR REPLACE FUNCTION normalized.refresh_de_population(
     AS $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM normalized.de_gemeinde
+        SELECT 1 FROM normalized.gemeinde
         WHERE geography_version = p_geography_version
     ) THEN
         RAISE EXCEPTION 'No Gemeinden for geography_version=%', p_geography_version;
@@ -321,7 +320,7 @@ BEGIN
     -- Every file repeats the Germany row; all copies must agree.
     IF EXISTS (
         SELECT 1
-        FROM raw.de_zensus2022_population AS raw_row
+        FROM raw.zensus2022_population AS raw_row
         WHERE raw_row.source_sha256 = ANY(p_source_sha256s)
           AND raw_row.variable_2_attribute_code IS NULL
           AND raw_row.value_unit = 'Anzahl'
@@ -331,18 +330,18 @@ BEGIN
         RAISE EXCEPTION 'Zensus extracts disagree on a published total';
     END IF;
 
-    DELETE FROM normalized.de_zensus_published_population
+    DELETE FROM normalized.zensus_published_population
     WHERE source_sha256 = ANY(p_source_sha256s);
 
-    INSERT INTO normalized.de_zensus_published_population
+    INSERT INTO normalized.zensus_published_population
     SELECT level, region_key, region_name, population_total, source_value,
            p_reference_date, table_code, source_sha256
-    FROM normalized.de_zensus_total_rows(p_source_sha256s);
+    FROM normalized.zensus_total_rows(p_source_sha256s);
 
-    DELETE FROM normalized.de_gemeinde_population
+    DELETE FROM normalized.gemeinde_population
     WHERE geography_version = p_geography_version;
 
-    INSERT INTO normalized.de_gemeinde_population
+    INSERT INTO normalized.gemeinde_population
     SELECT
         gemeinde.geography_version,
         gemeinde.ars,
@@ -359,8 +358,8 @@ BEGIN
         p_reference_date,
         COALESCE(census.table_code, '1000A-1003'),
         COALESCE(census.source_sha256, 'none')
-    FROM normalized.de_gemeinde AS gemeinde
-    LEFT JOIN normalized.de_zensus_total_rows(p_source_sha256s) AS census
+    FROM normalized.gemeinde AS gemeinde
+    LEFT JOIN normalized.zensus_total_rows(p_source_sha256s) AS census
       ON census.level = 'gem'
      AND census.region_key = gemeinde.ars
     WHERE gemeinde.geography_version = p_geography_version;
@@ -373,9 +372,9 @@ BEGIN
         COUNT(*) FILTER (WHERE population_status = 'no_census_record_unincorporated'),
         COUNT(*) FILTER (WHERE population_status = 'no_census_record'),
         COUNT(*) FILTER (WHERE population_status = 'rejected_source_value'),
-        (SELECT COUNT(*) FROM normalized.de_zensus_published_population
+        (SELECT COUNT(*) FROM normalized.zensus_published_population
          WHERE source_sha256 = ANY(p_source_sha256s))
-    FROM normalized.de_gemeinde_population
+    FROM normalized.gemeinde_population
     WHERE geography_version = p_geography_version;
 END;
 $$;
@@ -383,7 +382,7 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Check 1: key coverage. One row per exception; `blocking` decides pass/fail.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.check_de_key_coverage(
+CREATE OR REPLACE FUNCTION normalized.check_key_coverage(
     p_geography_version text,
     p_source_sha256s text[]
 ) RETURNS TABLE(
@@ -396,19 +395,19 @@ CREATE OR REPLACE FUNCTION normalized.check_de_key_coverage(
     LANGUAGE sql STABLE
     AS $$
     WITH published AS (
-        SELECT * FROM normalized.de_zensus_published_population
+        SELECT * FROM normalized.zensus_published_population
         WHERE source_sha256 = ANY(p_source_sha256s)
     ),
     geometry_keys AS (
         SELECT 'lan' AS level, land_key AS region_key, land_name AS region_name,
                false AS is_unincorporated
-        FROM normalized.de_land WHERE geography_version = p_geography_version
+        FROM normalized.land WHERE geography_version = p_geography_version
         UNION ALL
         SELECT 'krs', kreis_key, kreis_name, false
-        FROM normalized.de_kreis WHERE geography_version = p_geography_version
+        FROM normalized.kreis WHERE geography_version = p_geography_version
         UNION ALL
         SELECT 'gem', ars, gemeinde_name, is_unincorporated
-        FROM normalized.de_gemeinde WHERE geography_version = p_geography_version
+        FROM normalized.gemeinde WHERE geography_version = p_geography_version
     )
     SELECT g.level,
            CASE WHEN g.is_unincorporated
@@ -429,8 +428,8 @@ CREATE OR REPLACE FUNCTION normalized.check_de_key_coverage(
     WHERE p.level <> 'sta' AND g.region_key IS NULL
     UNION ALL
     SELECT 'gem', 'rejected_census_value', pop.ars, gem.gemeinde_name, true
-    FROM normalized.de_gemeinde_population AS pop
-    JOIN normalized.de_gemeinde AS gem USING (geography_version, ars)
+    FROM normalized.gemeinde_population AS pop
+    JOIN normalized.gemeinde AS gem USING (geography_version, ars)
     WHERE pop.geography_version = p_geography_version
       AND pop.population_status = 'rejected_source_value'
     ORDER BY 5 DESC, 1, 3
@@ -443,7 +442,7 @@ $$;
 -- equals its Kreis's Land, Gemeinde keys agree with VG250's key parts. One row
 -- per violation; empty = pass. Area consistency is checked separately.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.check_de_hierarchy(
+CREATE OR REPLACE FUNCTION normalized.check_hierarchy(
     p_geography_version text
 ) RETURNS TABLE(
     issue text,
@@ -453,35 +452,35 @@ CREATE OR REPLACE FUNCTION normalized.check_de_hierarchy(
     LANGUAGE sql STABLE
     AS $$
     SELECT 'kreis_without_gemeinde', k.kreis_key, k.kreis_name
-    FROM normalized.de_kreis AS k
+    FROM normalized.kreis AS k
     WHERE k.geography_version = p_geography_version
       AND NOT EXISTS (
-          SELECT 1 FROM normalized.de_gemeinde AS g
+          SELECT 1 FROM normalized.gemeinde AS g
           WHERE g.geography_version = k.geography_version
             AND g.kreis_key = k.kreis_key
       )
     UNION ALL
     SELECT 'land_without_kreis', l.land_key, l.land_name
-    FROM normalized.de_land AS l
+    FROM normalized.land AS l
     WHERE l.geography_version = p_geography_version
       AND NOT EXISTS (
-          SELECT 1 FROM normalized.de_kreis AS k
+          SELECT 1 FROM normalized.kreis AS k
           WHERE k.geography_version = l.geography_version
             AND k.land_key = l.land_key
       )
     UNION ALL
     SELECT 'gemeinde_land_differs_from_kreis_land', g.ars,
            g.land_key || ' vs ' || k.land_key
-    FROM normalized.de_gemeinde AS g
-    JOIN normalized.de_kreis AS k
+    FROM normalized.gemeinde AS g
+    JOIN normalized.kreis AS k
       USING (geography_version, kreis_key)
     WHERE g.geography_version = p_geography_version
       AND g.land_key <> k.land_key
     UNION ALL
     SELECT 'gemeinde_key_parts_disagree', g.ars,
            concat_ws('|', r.sn_l, r.sn_r, r.sn_k)
-    FROM normalized.de_gemeinde AS g
-    JOIN raw.de_vg250 AS r
+    FROM normalized.gemeinde AS g
+    JOIN raw.vg250 AS r
       ON r.source_sha256 = g.source_sha256
      AND r.level = 'gem' AND r.gf = 4 AND r.ars = g.ars
     WHERE g.geography_version = p_geography_version
@@ -491,7 +490,7 @@ $$;
 
 -- Area consistency: Gemeinden should partition their Kreis. Reported, not
 -- gating: VG250 is generalised, so tiny sliver differences are possible.
-CREATE OR REPLACE FUNCTION normalized.de_kreis_area_partition(
+CREATE OR REPLACE FUNCTION normalized.kreis_area_partition(
     p_geography_version text
 ) RETURNS TABLE(
     kreis_key text,
@@ -503,8 +502,8 @@ CREATE OR REPLACE FUNCTION normalized.de_kreis_area_partition(
     AS $$
     SELECT k.kreis_key, k.area_m2, SUM(g.area_m2),
            (SUM(g.area_m2) - k.area_m2) / k.area_m2
-    FROM normalized.de_kreis AS k
-    JOIN normalized.de_gemeinde AS g USING (geography_version, kreis_key)
+    FROM normalized.kreis AS k
+    JOIN normalized.gemeinde AS g USING (geography_version, kreis_key)
     WHERE k.geography_version = p_geography_version
     GROUP BY k.kreis_key, k.area_m2
 $$;
@@ -515,7 +514,7 @@ $$;
 -- extracts). One row per published or derived region; FULL JOIN, so a
 -- region present on only one side shows up with a NULL.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.check_de_source_totals(
+CREATE OR REPLACE FUNCTION normalized.check_source_totals(
     p_geography_version text,
     p_source_sha256s text[]
 ) RETURNS TABLE(
@@ -530,8 +529,8 @@ CREATE OR REPLACE FUNCTION normalized.check_de_source_totals(
     AS $$
     WITH gem AS (
         SELECT g.kreis_key, g.land_key, p.population_total::bigint AS population
-        FROM normalized.de_gemeinde_population AS p
-        JOIN normalized.de_gemeinde AS g
+        FROM normalized.gemeinde_population AS p
+        JOIN normalized.gemeinde AS g
           ON g.geography_version = p.geography_version AND g.ars = p.ars
         WHERE p.geography_version = p_geography_version
           AND p.population_total IS NOT NULL
@@ -547,7 +546,7 @@ CREATE OR REPLACE FUNCTION normalized.check_de_source_totals(
     published AS (
         SELECT z.level, z.region_key, z.region_name,
                z.population_total
-        FROM normalized.de_zensus_published_population AS z
+        FROM normalized.zensus_published_population AS z
         WHERE z.source_sha256 = ANY (p_source_sha256s)
           AND z.level IN ('krs', 'lan', 'sta')
     )

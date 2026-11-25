@@ -229,12 +229,12 @@ def test_refresh_serves_published_values_with_explicit_status(tmp_path) -> None:
             apply_indicator_schema(connection)
             upsert_ba_catalogue(connection)
             connection.execute(
-                "INSERT INTO normalized.de_land VALUES (%s,'99','Fixland',%s,4e6,'f')",
+                "INSERT INTO normalized.land VALUES (%s,'99','Fixland',%s,4e6,'f')",
                 (FIXTURE, square),
             )
             for kreis in ("99001", "99002"):
                 connection.execute(
-                    "INSERT INTO normalized.de_kreis VALUES (%s,%s,'99',%s,'Kreis',NULL,%s,2e6,'f')",
+                    "INSERT INTO normalized.kreis VALUES (%s,%s,'99',%s,'Kreis',NULL,%s,2e6,'f')",
                     (FIXTURE, kreis, f"Kreis {kreis}", square),
                 )
             for ars, ags, unincorporated in (
@@ -245,21 +245,21 @@ def test_refresh_serves_published_values_with_explicit_status(tmp_path) -> None:
                 ("990020000000", "99002000", False),  # kreisfreie Stadt
             ):
                 connection.execute(
-                    "INSERT INTO normalized.de_gemeinde VALUES "
+                    "INSERT INTO normalized.gemeinde VALUES "
                     "(%s,%s,%s,left(%s,5),'99','G','Gemeinde',%s,%s,1e6,'f')",
                     (FIXTURE, ars, ags, ars, unincorporated, square),
                 )
             copy_rows(
                 connection,
                 schema="raw",
-                table="de_ba_gemeindedaten",
+                table="ba_gemeindedaten",
                 columns=RAW_COLUMNS,
                 rows=raw_rows(content, path=path, sha256="fixture", contract=CONTRACT),
             )
             summary = dict(
                 ((level, status), count)
                 for level, status, count in connection.execute(
-                    "SELECT * FROM normalized.refresh_de_ba_indicators(%s, %s)",
+                    "SELECT * FROM normalized.refresh_ba_indicators(%s, %s)",
                     (REFERENCE_DATE, FIXTURE),
                 )
             )
@@ -269,29 +269,29 @@ def test_refresh_serves_published_values_with_explicit_status(tmp_path) -> None:
                     """
                     SELECT level, region_key, indicator_code, value, value_status,
                            status_reason, source_key
-                    FROM normalized.de_indicator_value
+                    FROM normalized.indicator_value
                     WHERE geography_version = %s AND reference_date = %s
                     """,
                     (FIXTURE, REFERENCE_DATE),
                 )
             }
             coverage = connection.execute(
-                "SELECT issue, level, region_key FROM normalized.check_de_ba_key_coverage(%s, %s)",
+                "SELECT issue, level, region_key FROM normalized.check_ba_key_coverage(%s, %s)",
                 (REFERENCE_DATE, FIXTURE),
             ).fetchall()
             totals = connection.execute(
-                "SELECT * FROM normalized.check_de_ba_source_totals(%s)", (REFERENCE_DATE,)
+                "SELECT * FROM normalized.check_ba_source_totals(%s)", (REFERENCE_DATE,)
             ).fetchall()
             identities_before = connection.execute(
-                "SELECT * FROM normalized.check_de_ba_identities(%s)", (REFERENCE_DATE,)
+                "SELECT * FROM normalized.check_ba_identities(%s)", (REFERENCE_DATE,)
             ).fetchall()
             connection.execute(
-                "UPDATE raw.de_ba_gemeindedaten SET column_02 = '61' "
+                "UPDATE raw.ba_gemeindedaten SET column_02 = '61' "
                 "WHERE reference_date = %s AND source_key = '99001001'",
                 (REFERENCE_DATE,),
             )
             identities_after = connection.execute(
-                "SELECT rule, source_key FROM normalized.check_de_ba_identities(%s)",
+                "SELECT rule, source_key FROM normalized.check_ba_identities(%s)",
                 (REFERENCE_DATE,),
             ).fetchall()
 

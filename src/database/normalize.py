@@ -49,11 +49,11 @@ def refresh_hierarchy(
     with database_connection(application_name="datlas_hierarchy") as connection:
         apply_normalized_schema(connection)
         row = connection.execute(
-            "SELECT * FROM normalized.refresh_de_hierarchy(%s, %s)",
+            "SELECT * FROM normalized.refresh_hierarchy(%s, %s)",
             (VG250_CONTRACT.archive_sha256, geography_version),
         ).fetchone()
     if row is None:
-        raise RuntimeError("refresh_de_hierarchy returned no summary")
+        raise RuntimeError("refresh_hierarchy returned no summary")
     return HierarchySummary(*(int(value) for value in row))
 
 
@@ -63,7 +63,7 @@ def refresh_population(
     with database_connection(application_name="datlas_population") as connection:
         apply_normalized_schema(connection)
         row = connection.execute(
-            "SELECT * FROM normalized.refresh_de_population(%s, %s, %s)",
+            "SELECT * FROM normalized.refresh_population(%s, %s, %s)",
             (
                 geography_version,
                 zensus_source_sha256s(),
@@ -71,5 +71,5 @@ def refresh_population(
             ),
         ).fetchone()
     if row is None:
-        raise RuntimeError("refresh_de_population returned no summary")
+        raise RuntimeError("refresh_population returned no summary")
     return PopulationSummary(*(int(value) for value in row))

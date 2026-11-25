@@ -4,10 +4,10 @@ import dagster as dg
 
 from src.database.connection import database_connection
 from src.dagster_pipeline.assets.normalized import (
-    NORMALIZED_DE_HIERARCHY_KEY,
-    NORMALIZED_DE_POPULATION_KEY,
+    NORMALIZED_HIERARCHY_KEY,
+    NORMALIZED_POPULATION_KEY,
 )
-from src.dagster_pipeline.assets.raw import GERMANY_GROUP
+from src.dagster_pipeline.groups import FORECAST_GROUP, STATIC_GROUP
 from src.dagster_pipeline.assets.icon_d2_ruc import RAW_ICON_D2_RUC_ASSETS
 from src.dagster_pipeline.assets.database_spatial import NORMALIZED_ICON_CELL_KEY
 from src.dagster_pipeline.partitions import (
@@ -22,9 +22,9 @@ from src.database.forecast import (
 )
 
 
-NORMALIZED_DE_ICON_BRIDGE_KEY = dg.AssetKey(["normalized", "de_icon_gemeinde_bridge"])
-NORMALIZED_DE_GEMEINDE_FORECAST_KEY = dg.AssetKey(["normalized", "de_gemeinde_forecast"])
-ANALYTICAL_DE_CURRENT_FORECAST_KEY = dg.AssetKey(["analytical", "de_current_forecast_25h"])
+NORMALIZED_ICON_BRIDGE_KEY = dg.AssetKey(["normalized", "icon_gemeinde_bridge"])
+NORMALIZED_GEMEINDE_FORECAST_KEY = dg.AssetKey(["normalized", "gemeinde_forecast"])
+ANALYTICAL_CURRENT_FORECAST_KEY = dg.AssetKey(["analytical", "current_forecast_25h"])
 
 # Open decision 3 (Ole, 2026-11-09): keep the newest complete run and the one
 # before it. Database rows only; GRIB files follow the existing file rule.
@@ -32,22 +32,22 @@ KEEP_COMPLETE_RUNS = 2
 
 
 @dg.asset(
-    key=NORMALIZED_DE_ICON_BRIDGE_KEY,
+    key=NORMALIZED_ICON_BRIDGE_KEY,
     # The bridge is built from Berlin's normalized.icon_cell, not from the raw grid.
-    deps=[NORMALIZED_DE_HIERARCHY_KEY, NORMALIZED_ICON_CELL_KEY],
-    group_name=GERMANY_GROUP,
+    deps=[NORMALIZED_HIERARCHY_KEY, NORMALIZED_ICON_CELL_KEY],
+    group_name=STATIC_GROUP,
     description=(
         "Germany grid subset (ICON cells intersecting a Gemeinde, transformed "
         "from the Berlin cell polygons to EPSG:3035) and the cell-Gemeinde area "
         "bridge. Berlin's mask and bridges are read, never written."
     ),
 )
-def normalized_de_icon_gemeinde_bridge(context: dg.AssetExecutionContext) -> None:
+def normalized_icon_gemeinde_bridge(context: dg.AssetExecutionContext) -> None:
     with database_connection(application_name="datlas_bridge") as connection:
         apply_forecast_schema(connection)
         connection.commit()  # release the view locks before the rebuild
         cells, rows, gemeinden = connection.execute(
-            "SELECT * FROM normalized.refresh_de_icon_bridge(%s, %s)",
+            "SELECT * FROM normalized.refresh_icon_bridge(%s, %s)",
             (GEOGRAPHY_VERSION, SOURCE_GRID_ID),
         ).fetchone()
         if not cells:
@@ -68,17 +68,17 @@ def normalized_de_icon_gemeinde_bridge(context: dg.AssetExecutionContext) -> Non
 
 
 @dg.asset(
-    key=NORMALIZED_DE_GEMEINDE_FORECAST_KEY,
+    key=NORMALIZED_GEMEINDE_FORECAST_KEY,
     partitions_def=WEATHER_PARTITIONS,
-    deps=[*(asset.key for asset in RAW_ICON_D2_RUC_ASSETS), NORMALIZED_DE_ICON_BRIDGE_KEY],
-    group_name=GERMANY_GROUP,
+    deps=[*(asset.key for asset in RAW_ICON_D2_RUC_ASSETS), NORMALIZED_ICON_BRIDGE_KEY],
+    group_name=FORECAST_GROUP,
     description=(
         "Per-cell temperature and shade apparent temperature for all Germany "
         "cells and their area-weighted Gemeinde values for one forecast "
         "partition (SQL)."
     ),
 )
-def normalized_de_gemeinde_forecast(context: dg.AssetExecutionContext) -> None:
+def normalized_gemeinde_forecast(context: dg.AssetExecutionContext) -> None:
     forecast = forecast_key_from_partition(context.partition_key)
     result = process_partition(forecast)
     metadata = {key: value for key, value in asdict(result).items() if key != "timings"}
@@ -87,42 +87,42 @@ def normalized_de_gemeinde_forecast(context: dg.AssetExecutionContext) -> None:
 
 
 @dg.asset(
-    key=ANALYTICAL_DE_CURRENT_FORECAST_KEY,
-    deps=[NORMALIZED_DE_GEMEINDE_FORECAST_KEY, NORMALIZED_DE_POPULATION_KEY],
-    group_name=GERMANY_GROUP,
+    key=ANALYTICAL_CURRENT_FORECAST_KEY,
+    deps=[NORMALIZED_GEMEINDE_FORECAST_KEY, NORMALIZED_POPULATION_KEY],
+    group_name=FORECAST_GROUP,
     description=(
-        "Publishes the current complete Germany forecast: the de_current_* "
+        "Publishes the current complete Germany forecast: the current_* "
         "views (Gemeinde, Kreis, Land, Bund; area- and population-weighted "
         "roll-ups; Gemeinde, Kreis, Land and Bund 24-hour summaries) and "
         "applies retention (newest complete run plus the previous one)."
     ),
 )
-def analytical_de_current_forecast_25h(context: dg.AssetExecutionContext) -> None:
+def analytical_current_forecast_25h(context: dg.AssetExecutionContext) -> None:
     with database_connection(application_name="datlas_publish") as connection:
         apply_forecast_schema(connection)
         connection.commit()  # release the view locks before retention
         current = connection.execute(
-            "SELECT run_time_utc FROM analytical.de_current_run"
+            "SELECT run_time_utc FROM analytical.current_run"
         ).fetchone()
         if current is None:
             raise RuntimeError("No complete Germany forecast run (25 lead times) exists")
         kept, deleted_cells, deleted_gemeinden = connection.execute(
-            "SELECT * FROM normalized.prune_de_forecast(%s, %s)",
+            "SELECT * FROM normalized.prune_forecast(%s, %s)",
             (GEOGRAPHY_VERSION, KEEP_COMPLETE_RUNS),
         ).fetchone()
         counts = connection.execute(
             """
             SELECT
-                (SELECT COUNT(*) FROM analytical.de_current_gemeinde_forecast_25h),
-                (SELECT COUNT(*) FROM analytical.de_current_kreis_forecast_25h),
-                (SELECT COUNT(*) FROM analytical.de_current_land_forecast_25h),
-                (SELECT COUNT(*) FROM analytical.de_current_bund_forecast_25h),
-                (SELECT COUNT(*) FROM analytical.de_current_gemeinde_summary),
-                (SELECT COUNT(*) FROM analytical.de_current_kreis_summary),
-                (SELECT COUNT(*) FROM analytical.de_current_land_summary),
-                (SELECT COUNT(DISTINCT run_time_utc) FROM normalized.de_gemeinde_forecast),
-                pg_total_relation_size('normalized.de_icon_cell_value'),
-                pg_total_relation_size('normalized.de_gemeinde_forecast')
+                (SELECT COUNT(*) FROM analytical.current_gemeinde_forecast_25h),
+                (SELECT COUNT(*) FROM analytical.current_kreis_forecast_25h),
+                (SELECT COUNT(*) FROM analytical.current_land_forecast_25h),
+                (SELECT COUNT(*) FROM analytical.current_bund_forecast_25h),
+                (SELECT COUNT(*) FROM analytical.current_gemeinde_summary),
+                (SELECT COUNT(*) FROM analytical.current_kreis_summary),
+                (SELECT COUNT(*) FROM analytical.current_land_summary),
+                (SELECT COUNT(DISTINCT run_time_utc) FROM normalized.gemeinde_forecast),
+                pg_total_relation_size('normalized.icon_cell_value'),
+                pg_total_relation_size('normalized.gemeinde_forecast')
             """
         ).fetchone()
     context.add_output_metadata(
@@ -145,8 +145,8 @@ def analytical_de_current_forecast_25h(context: dg.AssetExecutionContext) -> Non
     )
 
 
-GERMANY_FORECAST_ASSETS = [
-    normalized_de_icon_gemeinde_bridge,
-    normalized_de_gemeinde_forecast,
-    analytical_de_current_forecast_25h,
+FORECAST_ASSETS = [
+    normalized_icon_gemeinde_bridge,
+    normalized_gemeinde_forecast,
+    analytical_current_forecast_25h,
 ]

@@ -177,14 +177,14 @@ def load_vg250_raw(
     with database_connection(application_name="datlas_vg250_load") as connection:
         apply_raw_schema(connection)
         connection.execute(
-            "DELETE FROM raw.de_vg250 WHERE source_sha256 = %s",
+            "DELETE FROM raw.vg250 WHERE source_sha256 = %s",
             (archive_sha256,),
         )
         for level in contract.feature_counts:
             loaded = copy_rows(
                 connection,
                 schema="raw",
-                table="de_vg250",
+                table="vg250",
                 columns=columns,
                 rows=vg250_rows(geopackage, level, archive_sha256=archive_sha256),
             )
@@ -196,7 +196,7 @@ def load_vg250_raw(
                 )
             results.append(
                 RawLoadResult(
-                    target_table=f"raw.de_vg250[{level}]",
+                    target_table=f"raw.vg250[{level}]",
                     source_path=str(geopackage),
                     source_sha256=archive_sha256,
                     row_count=loaded.row_count,
@@ -258,13 +258,13 @@ def load_zensus_extract(
     )
 
     connection.execute(
-        "DELETE FROM raw.de_zensus2022_population WHERE source_sha256 = %s",
+        "DELETE FROM raw.zensus2022_population WHERE source_sha256 = %s",
         (source_sha256,),
     )
     loaded = copy_rows(
         connection,
         schema="raw",
-        table="de_zensus2022_population",
+        table="zensus2022_population",
         columns=(
             "table_code",
             "requested_regional_variable",
@@ -278,7 +278,7 @@ def load_zensus_extract(
         rows=rows,
     )
     return RawLoadResult(
-        target_table="raw.de_zensus2022_population",
+        target_table="raw.zensus2022_population",
         source_path=str(path),
         source_sha256=source_sha256,
         row_count=loaded.row_count,

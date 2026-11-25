@@ -11,8 +11,8 @@ from datetime import date
 import dagster as dg
 import requests
 
-from src.dagster_pipeline.assets.normalized import NORMALIZED_DE_HIERARCHY_KEY
-from src.dagster_pipeline.assets.raw import GERMANY_GROUP
+from src.dagster_pipeline.assets.normalized import NORMALIZED_HIERARCHY_KEY
+from src.dagster_pipeline.groups import SECTORS_GROUP
 from src.database.connection import database_connection
 from src.ingestion.ba_sectors import (
     PoliteClient,
@@ -26,9 +26,9 @@ from src.ingestion.contract import GEOGRAPHY_VERSION, SECTOR_LATEST_KNOWN
 from src.database.indicators import refresh_sectors
 
 
-RAW_DE_BA_REGIONALREPORT_KEY = dg.AssetKey(["raw", "de_ba_regionalreport"])
-RAW_DE_BA_WZ_HEFT_KEY = dg.AssetKey(["raw", "de_ba_wz_heft"])
-NORMALIZED_DE_SECTOR_VALUES_KEY = dg.AssetKey(["normalized", "de_sector_values"])
+RAW_BA_REGIONALREPORT_KEY = dg.AssetKey(["raw", "ba_regionalreport"])
+RAW_BA_WZ_HEFT_KEY = dg.AssetKey(["raw", "ba_wz_heft"])
+NORMALIZED_SECTOR_VALUES_KEY = dg.AssetKey(["normalized", "sector_values"])
 
 
 class SectorConfig(dg.Config):
@@ -37,15 +37,15 @@ class SectorConfig(dg.Config):
 
 
 @dg.asset(
-    key=RAW_DE_BA_WZ_HEFT_KEY,
-    group_name=GERMANY_GROUP,
+    key=RAW_BA_WZ_HEFT_KEY,
+    group_name=SECTORS_GROUP,
     description=(
         "BA Beschäftigte nach Wirtschaftszweigen (WZ 2008), sheet SVB - Tabelle I, "
         "for the 16 Länder and Germany, for the configured quarter and the same "
         "quarter a year earlier (year-on-year change), as delivered."
     ),
 )
-def raw_de_ba_wz_heft(context: dg.AssetExecutionContext, config: SectorConfig) -> None:
+def raw_ba_wz_heft(context: dg.AssetExecutionContext, config: SectorConfig) -> None:
     file_date = date.fromisoformat(config.file_date)
     previous = date(file_date.year - 1, file_date.month, file_date.day)
     metadata: dict[str, object] = {}
@@ -61,16 +61,16 @@ def raw_de_ba_wz_heft(context: dg.AssetExecutionContext, config: SectorConfig) -
 
 
 @dg.asset(
-    key=RAW_DE_BA_REGIONALREPORT_KEY,
-    deps=[NORMALIZED_DE_HIERARCHY_KEY],
-    group_name=GERMANY_GROUP,
+    key=RAW_BA_REGIONALREPORT_KEY,
+    deps=[NORMALIZED_HIERARCHY_KEY],
+    group_name=SECTORS_GROUP,
     description=(
         "BA Regionalreport über Beschäftigte, tables 2.1 and 2.3, one file per "
         "Kreis of the hierarchy for the configured quarter (five quarters per "
         "file), downloaded one at a time, as delivered."
     ),
 )
-def raw_de_ba_regionalreport(context: dg.AssetExecutionContext, config: SectorConfig) -> None:
+def raw_ba_regionalreport(context: dg.AssetExecutionContext, config: SectorConfig) -> None:
     file_date = date.fromisoformat(config.file_date)
     with database_connection(application_name="datlas_sector_keys") as connection:
         keys = kreis_keys(connection, GEOGRAPHY_VERSION)
@@ -91,22 +91,22 @@ def raw_de_ba_regionalreport(context: dg.AssetExecutionContext, config: SectorCo
 
 
 @dg.asset(
-    key=NORMALIZED_DE_SECTOR_VALUES_KEY,
-    deps=[RAW_DE_BA_REGIONALREPORT_KEY, RAW_DE_BA_WZ_HEFT_KEY, NORMALIZED_DE_HIERARCHY_KEY],
-    group_name=GERMANY_GROUP,
+    key=NORMALIZED_SECTOR_VALUES_KEY,
+    deps=[RAW_BA_REGIONALREPORT_KEY, RAW_BA_WZ_HEFT_KEY, NORMALIZED_HIERARCHY_KEY],
+    group_name=SECTORS_GROUP,
     description=(
-        "Sector rows of normalized.de_indicator_value: Kreise (Regionalreport, "
+        "Sector rows of normalized.indicator_value: Kreise (Regionalreport, "
         "all quarters, newest file per quarter) and Länder and Germany (WZ "
         "booklets), each value with its status. Served by "
-        "analytical.de_current_sectors."
+        "analytical.current_sectors."
     ),
 )
-def normalized_de_sector_values(context: dg.AssetExecutionContext) -> None:
+def normalized_sector_values(context: dg.AssetExecutionContext) -> None:
     context.add_output_metadata(asdict(refresh_sectors(GEOGRAPHY_VERSION)))
 
 
-GERMANY_SECTOR_ASSETS = [
-    raw_de_ba_wz_heft,
-    raw_de_ba_regionalreport,
-    normalized_de_sector_values,
+SECTOR_ASSETS = [
+    raw_ba_wz_heft,
+    raw_ba_regionalreport,
+    normalized_sector_values,
 ]

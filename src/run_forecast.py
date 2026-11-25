@@ -144,12 +144,12 @@ def partition_complete(forecast) -> bool:
         row = connection.execute(
             """
             SELECT
-                (SELECT COUNT(*) FROM normalized.de_gemeinde_forecast
+                (SELECT COUNT(*) FROM normalized.gemeinde_forecast
                  WHERE run_time_utc = %s AND lead_time = %s
                    AND geography_version = %s
                    AND temperature_c IS NOT NULL
                    AND apparent_temperature_shade_c IS NOT NULL),
-                (SELECT COUNT(*) FROM normalized.de_gemeinde
+                (SELECT COUNT(*) FROM normalized.gemeinde
                  WHERE geography_version = %s)
             """,
             (forecast.run_time, forecast.lead_time_label, GEOGRAPHY_VERSION, GEOGRAPHY_VERSION),
@@ -178,7 +178,7 @@ def run_forecast(
         ensure_forecast_sources_available(forecast, project_root=project_root)
         LOGGER.info("[%02d/25] Materializing lead %s", index, lead_time)
         result = execute_job(
-            "germany_forecast",
+            "forecast",
             partition_key=weather_partition_key(forecast),
         )
         if not result.success:
@@ -189,7 +189,7 @@ def run_forecast(
 
     partitions_seconds = perf_counter() - started
     publish_started = perf_counter()
-    publish = execute_job("germany_forecast_publish")
+    publish = execute_job("forecast_publish")
     if not publish.success:
         raise RuntimeError(f"Publishing failed; inspect Dagster run {publish.run_id}")
     checks = {

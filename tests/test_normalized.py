@@ -77,10 +77,10 @@ def test_refresh_and_checks_classify_every_case() -> None:
         with connection.transaction(force_rollback=True):
             apply_normalized_schema(connection)
             copy_rows(
-                connection, schema="raw", table="de_vg250", columns=VG250_COLUMNS, rows=vg250_rows
+                connection, schema="raw", table="vg250", columns=VG250_COLUMNS, rows=vg250_rows
             )
             copy_rows(
-                connection, schema="raw", table="de_zensus2022_population",
+                connection, schema="raw", table="zensus2022_population",
                 columns=(
                     "table_code", "requested_regional_variable",
                     "statistics_code", "statistics_label", "time_code",
@@ -97,13 +97,13 @@ def test_refresh_and_checks_classify_every_case() -> None:
             )
 
             hierarchy = connection.execute(
-                "SELECT * FROM normalized.refresh_de_hierarchy(%s, %s)",
+                "SELECT * FROM normalized.refresh_hierarchy(%s, %s)",
                 (FIXTURE_VG250, FIXTURE_VERSION),
             ).fetchone()
             assert hierarchy == (1, 2, 5, 1)
 
             connection.execute(
-                "SELECT * FROM normalized.refresh_de_population(%s, %s, %s)",
+                "SELECT * FROM normalized.refresh_population(%s, %s, %s)",
                 (FIXTURE_VERSION, [FIXTURE_ZENSUS], "2022-05-15"),
             ).fetchone()
 
@@ -112,7 +112,7 @@ def test_refresh_and_checks_classify_every_case() -> None:
                 for ars, total, status in connection.execute(
                     """
                     SELECT ars, population_total, population_status
-                    FROM normalized.de_gemeinde_population
+                    FROM normalized.gemeinde_population
                     WHERE geography_version = %s
                     """,
                     (FIXTURE_VERSION,),
@@ -129,7 +129,7 @@ def test_refresh_and_checks_classify_every_case() -> None:
             coverage = {
                 (issue, key, blocking)
                 for _, issue, key, _, blocking in connection.execute(
-                    "SELECT * FROM normalized.check_de_key_coverage(%s, %s)",
+                    "SELECT * FROM normalized.check_key_coverage(%s, %s)",
                     (FIXTURE_VERSION, [FIXTURE_ZENSUS]),
                 )
             }
@@ -142,7 +142,7 @@ def test_refresh_and_checks_classify_every_case() -> None:
 
             hierarchy_issues = set(
                 connection.execute(
-                    "SELECT issue, region_key FROM normalized.check_de_hierarchy(%s)",
+                    "SELECT issue, region_key FROM normalized.check_hierarchy(%s)",
                     (FIXTURE_VERSION,),
                 ).fetchall()
             )
@@ -153,7 +153,7 @@ def test_refresh_and_checks_classify_every_case() -> None:
             totals = {
                 (level, key): (gemeinde_sum, published, difference)
                 for level, key, _, gemeinde_sum, published, difference in connection.execute(
-                    "SELECT * FROM normalized.check_de_source_totals(%s, %s)",
+                    "SELECT * FROM normalized.check_source_totals(%s, %s)",
                     (FIXTURE_VERSION, [FIXTURE_ZENSUS]),
                 )
             }
@@ -190,12 +190,12 @@ def test_static_hierarchy_is_safe_to_repeat() -> None:
 
     def refresh(sha: str) -> tuple:
         return connection.execute(
-            "SELECT * FROM normalized.refresh_de_hierarchy(%s, %s)", (sha, version)
+            "SELECT * FROM normalized.refresh_hierarchy(%s, %s)", (sha, version)
         ).fetchone()
 
     def gemeinden() -> list[tuple]:
         return connection.execute(
-            "SELECT ars, gemeinde_name, source_sha256 FROM normalized.de_gemeinde "
+            "SELECT ars, gemeinde_name, source_sha256 FROM normalized.gemeinde "
             "WHERE geography_version = %s ORDER BY ars",
             (version,),
         ).fetchall()
@@ -203,13 +203,13 @@ def test_static_hierarchy_is_safe_to_repeat() -> None:
     with database_connection(application_name="datlas_repeat_test") as connection:
         with connection.transaction(force_rollback=True):
             apply_forecast_schema(connection)
-            copy_rows(connection, schema="raw", table="de_vg250", columns=VG250_COLUMNS,
+            copy_rows(connection, schema="raw", table="vg250", columns=VG250_COLUMNS,
                       rows=rows("fixture_vg250_a", "Eins"))
             first = refresh("fixture_vg250_a")
             built = gemeinden()
             # A forecast row now references a Gemeinde, as after a forecast run.
             connection.execute(
-                "INSERT INTO normalized.de_gemeinde_forecast VALUES "
+                "INSERT INTO normalized.gemeinde_forecast VALUES "
                 "('2099-01-01T00:00Z','PT000H00M','2099-01-01T00:00Z',%s,'fixture_grid',"
                 "'990010000001',1.0,1.0)",
                 (version,),
@@ -219,12 +219,12 @@ def test_static_hierarchy_is_safe_to_repeat() -> None:
             assert refresh("fixture_vg250_a") == first == (1, 1, 2, 0)
             assert gemeinden() == built
             assert connection.execute(
-                "SELECT COUNT(*) FROM normalized.de_gemeinde_forecast WHERE geography_version = %s",
+                "SELECT COUNT(*) FROM normalized.gemeinde_forecast WHERE geography_version = %s",
                 (version,),
             ).fetchone()[0] == 1
 
             # Another file under the same version: refused, hierarchy unchanged.
-            copy_rows(connection, schema="raw", table="de_vg250", columns=VG250_COLUMNS,
+            copy_rows(connection, schema="raw", table="vg250", columns=VG250_COLUMNS,
                       rows=rows("fixture_vg250_b", "Eins (umbenannt)"))
             with pytest.raises(psycopg.errors.RaiseException, match="another VG250 file"):
                 with connection.transaction():

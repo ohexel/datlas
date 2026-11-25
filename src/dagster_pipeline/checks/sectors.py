@@ -10,8 +10,8 @@ from psycopg import Connection
 
 from src.database.connection import database_connection
 from src.dagster_pipeline.assets.sectors import (
-    NORMALIZED_DE_SECTOR_VALUES_KEY,
-    RAW_DE_BA_REGIONALREPORT_KEY,
+    NORMALIZED_SECTOR_VALUES_KEY,
+    RAW_BA_REGIONALREPORT_KEY,
 )
 from src.ingestion.contract import (
     BA_REGIONALREPORT_CONTRACT,
@@ -28,14 +28,14 @@ MAX_LISTED = 50
 
 
 def _file_date(connection: Connection) -> date:
-    row = connection.execute("SELECT MAX(file_date) FROM raw.de_ba_regionalreport").fetchone()
+    row = connection.execute("SELECT MAX(file_date) FROM raw.ba_regionalreport").fetchone()
     if row is None or row[0] is None:
-        raise RuntimeError("raw.de_ba_regionalreport is empty")
+        raise RuntimeError("raw.ba_regionalreport is empty")
     return row[0]
 
 
-@dg.asset_check(asset=RAW_DE_BA_REGIONALREPORT_KEY, name="de_ba_sector_source_contract")
-def de_ba_sector_source_contract() -> dg.AssetCheckResult:
+@dg.asset_check(asset=RAW_BA_REGIONALREPORT_KEY, name="ba_sector_source_contract")
+def ba_sector_source_contract() -> dg.AssetCheckResult:
     """One complete file per Kreis and per Land; consistent Land rows."""
     contract = BA_REGIONALREPORT_CONTRACT
     rows_per_file = len(contract.sector_rows) * contract.quarters_per_file
@@ -45,11 +45,11 @@ def de_ba_sector_source_contract() -> dg.AssetCheckResult:
             """
             WITH per_file AS (
                 SELECT kreis_key, COUNT(*) FILTER (WHERE table_name = '2.3') AS rows_23
-                FROM raw.de_ba_regionalreport WHERE file_date = %s GROUP BY kreis_key
+                FROM raw.ba_regionalreport WHERE file_date = %s GROUP BY kreis_key
             ),
             land AS (
                 SELECT left(kreis_key, 2), quarter_date, COUNT(DISTINCT value) AS variants
-                FROM raw.de_ba_regionalreport
+                FROM raw.ba_regionalreport
                 WHERE file_date = %s AND table_name = '2.1'
                   AND region_label LIKE 'Bundesland %%' AND row_code = 'Insgesamt'
                 GROUP BY 1, 2
@@ -61,14 +61,14 @@ def de_ba_sector_source_contract() -> dg.AssetCheckResult:
             (file_date, file_date, rows_per_file),
         ).fetchone()
         hierarchy = connection.execute(
-            "SELECT COUNT(*) FROM normalized.de_kreis WHERE geography_version = %s",
+            "SELECT COUNT(*) FROM normalized.kreis WHERE geography_version = %s",
             (GEOGRAPHY_VERSION,),
         ).fetchone()[0]
         booklets = dict(
             connection.execute(
                 """
                 SELECT region_key, COUNT(*) FILTER (WHERE wz_code = ANY(%s))
-                FROM raw.de_ba_wz_heft WHERE file_date = %s GROUP BY region_key
+                FROM raw.ba_wz_heft WHERE file_date = %s GROUP BY region_key
                 """,
                 (["total", *LAND_DIVISIONS], file_date),
             ).fetchall()
@@ -102,13 +102,13 @@ def de_ba_sector_source_contract() -> dg.AssetCheckResult:
     )
 
 
-@dg.asset_check(asset=RAW_DE_BA_REGIONALREPORT_KEY, name="de_ba_sector_identities")
-def de_ba_sector_identities() -> dg.AssetCheckResult:
+@dg.asset_check(asset=RAW_BA_REGIONALREPORT_KEY, name="ba_sector_identities")
+def ba_sector_identities() -> dg.AssetCheckResult:
     """Sections, groups and sector rows of table 2.3 add up."""
     with database_connection(application_name="datlas_sector_check") as connection:
         file_date = _file_date(connection)
         rows = connection.execute(
-            "SELECT * FROM normalized.check_de_ba_sector_identities(%s)", (file_date,)
+            "SELECT * FROM normalized.check_ba_sector_identities(%s)", (file_date,)
         ).fetchall()
     return dg.AssetCheckResult(
         passed=not rows,
@@ -143,7 +143,7 @@ def evaluate_sector_totals(
     discrepancies: tuple[SectorSourceDiscrepancy, ...] = SECTOR_SOURCE_DISCREPANCIES,
     max_unassigned_share: float = MAX_UNASSIGNED_SHARE,
 ) -> SectorTotals:
-    """Rules for the rows of normalized.check_de_ba_sector_totals:
+    """Rules for the rows of normalized.check_ba_sector_totals:
     - published None: both sides have suppressed parts, not comparable;
     - Kreis sums of a Land and quarter with a documented discrepancy: accepted
       only at exactly the documented gap (kreise_to_land), listed otherwise;
@@ -195,13 +195,13 @@ def evaluate_sector_totals(
     return result
 
 
-@dg.asset_check(asset=NORMALIZED_DE_SECTOR_VALUES_KEY, name="de_ba_sector_source_totals")
-def de_ba_sector_source_totals() -> dg.AssetCheckResult:
+@dg.asset_check(asset=NORMALIZED_SECTOR_VALUES_KEY, name="ba_sector_source_totals")
+def ba_sector_source_totals() -> dg.AssetCheckResult:
     """Totals across Kreise, Länder, the two products and the Gemeindedaten."""
     with database_connection(application_name="datlas_sector_check") as connection:
         file_date = _file_date(connection)
         rows = connection.execute(
-            "SELECT * FROM normalized.check_de_ba_sector_totals(%s, %s)",
+            "SELECT * FROM normalized.check_ba_sector_totals(%s, %s)",
             (file_date, GEOGRAPHY_VERSION),
         ).fetchall()
     result = evaluate_sector_totals(rows)
@@ -233,28 +233,28 @@ def de_ba_sector_source_totals() -> dg.AssetCheckResult:
     )
 
 
-@dg.asset_check(asset=NORMALIZED_DE_SECTOR_VALUES_KEY, name="de_ba_sector_key_coverage")
-def de_ba_sector_key_coverage() -> dg.AssetCheckResult:
+@dg.asset_check(asset=NORMALIZED_SECTOR_VALUES_KEY, name="ba_sector_key_coverage")
+def ba_sector_key_coverage() -> dg.AssetCheckResult:
     """Every Kreis, Land and Germany has values for the newest quarter."""
     with database_connection(application_name="datlas_sector_check") as connection:
         rows = connection.execute(
             """
             SELECT level, region_key, region_name, employees_total_status
-            FROM analytical.de_current_sectors
+            FROM analytical.current_sectors
             WHERE employees_total_status <> 'value'
             ORDER BY 1, 2
             """
         ).fetchall()
         counts = dict(
             connection.execute(
-                "SELECT level, COUNT(*) FROM analytical.de_current_sectors GROUP BY 1"
+                "SELECT level, COUNT(*) FROM analytical.current_sectors GROUP BY 1"
             ).fetchall()
         )
         names = connection.execute(
             """
             SELECT w.region_key, w.region_name, l.land_name
-            FROM (SELECT DISTINCT region_key, region_name FROM raw.de_ba_wz_heft) AS w
-            JOIN normalized.de_land AS l
+            FROM (SELECT DISTINCT region_key, region_name FROM raw.ba_wz_heft) AS w
+            JOIN normalized.land AS l
               ON l.land_key = w.region_key AND l.geography_version = %s
             WHERE w.region_name <> l.land_name
             """,
@@ -275,9 +275,9 @@ def de_ba_sector_key_coverage() -> dg.AssetCheckResult:
     )
 
 
-GERMANY_SECTOR_CHECKS = [
-    de_ba_sector_source_contract,
-    de_ba_sector_identities,
-    de_ba_sector_source_totals,
-    de_ba_sector_key_coverage,
+SECTOR_CHECKS = [
+    ba_sector_source_contract,
+    ba_sector_identities,
+    ba_sector_source_totals,
+    ba_sector_key_coverage,
 ]

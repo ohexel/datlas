@@ -4,6 +4,8 @@ from typing import Any
 
 import dagster as dg
 
+from src.dagster_pipeline.groups import FORECAST_GROUP
+
 from src.dagster_pipeline.partitions import (
     WEATHER_PARTITIONS,
     forecast_key_from_partition,
@@ -31,7 +33,6 @@ from src.icon_grid_contract import (
 )
 
 
-RAW_GROUP = "icon_d2_ruc_raw"
 
 
 def _forecast_from_context(
@@ -295,7 +296,7 @@ def _build_raw_indicator_asset(
     @dg.asset(
         name=raw_name,
         partitions_def=WEATHER_PARTITIONS,
-        group_name=RAW_GROUP,
+        group_name=FORECAST_GROUP,
         compute_kind="python",
         description=(
             f"Retained raw DWD ICON D2 RUC "

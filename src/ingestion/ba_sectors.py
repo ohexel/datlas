@@ -40,7 +40,7 @@ from src.ingestion.contract import (
 from src.ingestion.static_raw_load import RawLoadResult
 
 
-LOGGER = logging.getLogger("germany_ba_sectors")
+LOGGER = logging.getLogger(__name__)
 TIMEOUT_SECONDS = 120
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 VALUE_PATTERN = re.compile(r"^[0-9]+$")
@@ -563,7 +563,7 @@ def kreis_keys(connection: Connection, geography_version: str) -> list[str]:
     return [
         row[0]
         for row in connection.execute(
-            "SELECT kreis_key FROM normalized.de_kreis WHERE geography_version = %s ORDER BY 1",
+            "SELECT kreis_key FROM normalized.kreis WHERE geography_version = %s ORDER BY 1",
             (geography_version,),
         )
     ]
@@ -606,9 +606,9 @@ def load_regionalreport_raw(
     with database_connection(application_name="datlas_sector_load") as connection:
         apply_sector_schema(connection)
         keys = kreis_keys(connection, geography_version)
-        connection.execute("DELETE FROM raw.de_ba_regionalreport WHERE file_date = %s", (file_date,))
+        connection.execute("DELETE FROM raw.ba_regionalreport WHERE file_date = %s", (file_date,))
         loaded = copy_rows(
-            connection, schema="raw", table="de_ba_regionalreport",
+            connection, schema="raw", table="ba_regionalreport",
             columns=REGIONALREPORT_COLUMNS,
             rows=(
                 row
@@ -618,8 +618,8 @@ def load_regionalreport_raw(
                 )
             ),
         )
-        connection.execute("ANALYZE raw.de_ba_regionalreport")
-    return RawLoadResult("raw.de_ba_regionalreport", str(file_date), f"{len(keys)} files",
+        connection.execute("ANALYZE raw.ba_regionalreport")
+    return RawLoadResult("raw.ba_regionalreport", str(file_date), f"{len(keys)} files",
                          loaded.row_count, loaded.duration_seconds)
 
 
@@ -627,17 +627,17 @@ def load_wz_heft_raw(file_date: date, project_root: Path = Path(".")) -> RawLoad
     """Load the 17 WZ booklets of one quarter into raw (replacing that quarter)."""
     with database_connection(application_name="datlas_sector_load") as connection:
         apply_sector_schema(connection)
-        connection.execute("DELETE FROM raw.de_ba_wz_heft WHERE file_date = %s", (file_date,))
+        connection.execute("DELETE FROM raw.ba_wz_heft WHERE file_date = %s", (file_date,))
         loaded = copy_rows(
-            connection, schema="raw", table="de_ba_wz_heft", columns=WZ_COLUMNS,
+            connection, schema="raw", table="ba_wz_heft", columns=WZ_COLUMNS,
             rows=(
                 row
                 for code in BA_WZ_HEFT_CONTRACT.regions
                 for row in wz_rows(project_root / BA_WZ_HEFT_CONTRACT.path(code, file_date), code, file_date)
             ),
         )
-        connection.execute("ANALYZE raw.de_ba_wz_heft")
-    return RawLoadResult("raw.de_ba_wz_heft", str(file_date), "17 files",
+        connection.execute("ANALYZE raw.ba_wz_heft")
+    return RawLoadResult("raw.ba_wz_heft", str(file_date), "17 files",
                          loaded.row_count, loaded.duration_seconds)
 
 

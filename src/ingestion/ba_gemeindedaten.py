@@ -34,7 +34,7 @@ from src.ingestion.contract import (
 from src.ingestion.static_raw_load import RawLoadResult
 
 
-LOGGER = logging.getLogger("germany_ba_gemeindedaten")
+LOGGER = logging.getLogger(__name__)
 TIMEOUT_SECONDS = 120
 XLSX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 VALUE_PATTERN = re.compile(r"^[0-9]+$")
@@ -382,21 +382,21 @@ def load_ba_gemeindedaten_raw(
     with database_connection(application_name="datlas_ba_load") as connection:
         apply_indicator_schema(connection)
         connection.execute(
-            "DELETE FROM raw.de_ba_gemeindedaten WHERE reference_date = %s",
+            "DELETE FROM raw.ba_gemeindedaten WHERE reference_date = %s",
             (reference_date,),
         )
         loaded = copy_rows(
             connection,
             schema="raw",
-            table="de_ba_gemeindedaten",
+            table="ba_gemeindedaten",
             columns=RAW_COLUMNS,
             rows=raw_rows(content, path=path, sha256=sha256, contract=contract),
         )
         # Fresh statistics: with the default estimate for a new table the
         # refresh joins about 11,000 x 11,000 rows per indicator.
-        connection.execute("ANALYZE raw.de_ba_gemeindedaten")
+        connection.execute("ANALYZE raw.ba_gemeindedaten")
     return RawLoadResult(
-        target_table="raw.de_ba_gemeindedaten",
+        target_table="raw.ba_gemeindedaten",
         source_path=str(path),
         source_sha256=sha256,
         row_count=loaded.row_count,

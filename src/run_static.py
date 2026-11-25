@@ -22,13 +22,13 @@ from src.dagster_home import execute_job
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
-def run_germany_static(project_root: Path = PROJECT_ROOT) -> dict[str, object]:
+def run_static(project_root: Path = PROJECT_ROOT) -> dict[str, object]:
     ensure_dagster_home(project_root)
     started = perf_counter()
-    result = execute_job("germany_static")
+    result = execute_job("static")
     if not result.success:
         raise RuntimeError(
-            f"germany_static failed; inspect Dagster run {result.run_id}"
+            f"static failed; inspect Dagster run {result.run_id}"
         )
     return {
         "status": "ready",
@@ -47,7 +47,7 @@ def main() -> int:
     logging.basicConfig(
         format="%(asctime)s %(levelname)s %(name)s %(message)s", level=logging.INFO
     )
-    print(json.dumps(run_germany_static(), indent=2))
+    print(json.dumps(run_static(), indent=2))
     return 0
 
 

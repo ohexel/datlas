@@ -1,4 +1,4 @@
-"""Germany layer acceptance: run after `germany_static` and at least one
+"""Acceptance: run after `python -m src.run_static` and at least one
 complete `python -m src.run_forecast`. Reads the installed database
 only; writes nothing.
 
@@ -31,59 +31,17 @@ def _all(sql: str, params: tuple | dict = ()) -> list[tuple]:
         return connection.execute(sql, params).fetchall()
 
 
-def test_germany_group_is_registered_with_all_checks() -> None:
-    from src.dagster_pipeline.definitions import defs
-
-    graph = defs.resolve_asset_graph()
-    germany_assets = {
-        key.to_user_string()
-        for key in graph.get_all_asset_keys()
-        if graph.get(key).group_name == "germany"
-    }
-    assert {
-        "raw/de_vg250",
-        "raw/de_zensus2022_population",
-        "normalized/de_hierarchy",
-        "normalized/de_population",
-        "normalized/de_icon_gemeinde_bridge",
-        "normalized/de_gemeinde_forecast",
-        "analytical/de_current_forecast_25h",
-        "raw/de_ba_gemeindedaten",
-        "normalized/de_indicator_value",
-        "raw/de_ba_regionalreport",
-        "raw/de_ba_wz_heft",
-        "normalized/de_sector_values",
-    } <= germany_assets
-    check_names = {key.name for key in graph.asset_check_keys}
-    assert {
-        "de_key_coverage",
-        "de_hierarchy_integrity",
-        "de_source_totals",
-        "de_bridge_coverage",
-        "de_forecast_completeness",
-        "de_forecast_plausibility",
-        "de_ba_source_contract",
-        "de_ba_column_identities",
-        "de_ba_key_coverage",
-        "de_ba_source_totals",
-        "de_ba_sector_source_contract",
-        "de_ba_sector_identities",
-        "de_ba_sector_source_totals",
-        "de_ba_sector_key_coverage",
-    } <= check_names
-
-
-def test_all_germany_checks_pass_on_installed_data() -> None:
-    from src.dagster_pipeline.checks.employment import GERMANY_EMPLOYMENT_CHECKS
-    from src.dagster_pipeline.checks.forecast import GERMANY_FORECAST_CHECKS
-    from src.dagster_pipeline.checks.normalized import GERMANY_NORMALIZED_CHECKS
-    from src.dagster_pipeline.checks.sectors import GERMANY_SECTOR_CHECKS
+def test_all_checks_pass_on_installed_data() -> None:
+    from src.dagster_pipeline.checks.employment import EMPLOYMENT_CHECKS
+    from src.dagster_pipeline.checks.forecast import FORECAST_CHECKS
+    from src.dagster_pipeline.checks.normalized import NORMALIZED_CHECKS
+    from src.dagster_pipeline.checks.sectors import SECTOR_CHECKS
 
     for check in (
-        *GERMANY_NORMALIZED_CHECKS,
-        *GERMANY_FORECAST_CHECKS,
-        *GERMANY_EMPLOYMENT_CHECKS,
-        *GERMANY_SECTOR_CHECKS,
+        *NORMALIZED_CHECKS,
+        *FORECAST_CHECKS,
+        *EMPLOYMENT_CHECKS,
+        *SECTOR_CHECKS,
     ):
         result = check.node_def.compute_fn.decorated_fn()
         assert result.passed, (check.check_key.name, result.metadata)
@@ -93,14 +51,14 @@ def test_current_views_are_complete_at_all_four_levels() -> None:
     row = _one(
         """
         SELECT
-            (SELECT COUNT(*) FROM analytical.de_current_gemeinde_forecast_25h),
-            (SELECT COUNT(DISTINCT ars) FROM analytical.de_current_gemeinde_forecast_25h),
-            (SELECT COUNT(*) FROM analytical.de_current_kreis_forecast_25h),
-            (SELECT COUNT(*) FROM analytical.de_current_land_forecast_25h),
-            (SELECT COUNT(*) FROM analytical.de_current_bund_forecast_25h),
-            (SELECT COUNT(*) FROM analytical.de_current_gemeinde_summary),
-            (SELECT COUNT(DISTINCT run_time_utc) FROM analytical.de_current_kreis_forecast_25h),
-            (SELECT COUNT(DISTINCT lead_hour) FROM analytical.de_current_bund_forecast_25h)
+            (SELECT COUNT(*) FROM analytical.current_gemeinde_forecast_25h),
+            (SELECT COUNT(DISTINCT ars) FROM analytical.current_gemeinde_forecast_25h),
+            (SELECT COUNT(*) FROM analytical.current_kreis_forecast_25h),
+            (SELECT COUNT(*) FROM analytical.current_land_forecast_25h),
+            (SELECT COUNT(*) FROM analytical.current_bund_forecast_25h),
+            (SELECT COUNT(*) FROM analytical.current_gemeinde_summary),
+            (SELECT COUNT(DISTINCT run_time_utc) FROM analytical.current_kreis_forecast_25h),
+            (SELECT COUNT(DISTINCT lead_hour) FROM analytical.current_bund_forecast_25h)
         """
     )
     assert row == (
@@ -125,15 +83,15 @@ def test_rollups_are_consistent_across_levels() -> None:
                    SUM(temperature_area_weighted_c * area_m2) / SUM(area_m2) AS t_area,
                    SUM(temperature_population_weighted_c * population_total)
                        / SUM(population_total) AS t_pop
-            FROM analytical.de_current_land_forecast_25h
+            FROM analytical.current_land_forecast_25h
             GROUP BY lead_hour
         )
         SELECT MAX(ABS(land.t_area - b.temperature_area_weighted_c)),
                MAX(ABS(land.t_pop - b.temperature_population_weighted_c)),
-               (SELECT SUM(population_total) FROM analytical.de_current_land_forecast_25h
+               (SELECT SUM(population_total) FROM analytical.current_land_forecast_25h
                 WHERE lead_hour = 0)
         FROM land
-        JOIN analytical.de_current_bund_forecast_25h AS b USING (lead_hour)
+        JOIN analytical.current_bund_forecast_25h AS b USING (lead_hour)
         """
     )
     area_difference, population_difference, population = row
@@ -149,7 +107,7 @@ def test_map_values_export_is_complete_for_the_current_run() -> None:
     with database_connection(application_name="datlas_acceptance") as connection:
         values = collect_values(connection)  # raises on any gap
         current = connection.execute(
-            "SELECT run_time_utc FROM analytical.de_current_run"
+            "SELECT run_time_utc FROM analytical.current_run"
         ).fetchone()[0]
     assert values["run_time_utc"] == current.strftime("%Y-%m-%dT%H:%MZ")
     assert values["tiles"] == f"{GEOGRAPHY_VERSION}.pmtiles"
@@ -185,12 +143,12 @@ def test_employment_view_covers_every_region_with_an_explicit_status() -> None:
         for level, status, count in _all(
             """
             SELECT level, jobs_ratio_status, COUNT(*)
-            FROM analytical.de_current_employment GROUP BY 1, 2
+            FROM analytical.current_employment GROUP BY 1, 2
             """
         )
     )
     reference_date = _one(
-        "SELECT DISTINCT reference_date FROM analytical.de_current_employment"
+        "SELECT DISTINCT reference_date FROM analytical.current_employment"
     )[0]
     known = BA_GEMEINDEDATEN_CONTRACT.vintage(reference_date)
     assert sum(c for (level, _), c in rows.items() if level == "gem") == GEMEINDEN
@@ -204,7 +162,7 @@ def test_employment_view_covers_every_region_with_an_explicit_status() -> None:
     # The ratio is exactly the quotient of the two published values.
     mismatches = _one(
         """
-        SELECT COUNT(*) FROM analytical.de_current_employment
+        SELECT COUNT(*) FROM analytical.current_employment
         WHERE jobs_ratio_status = 'value'
           AND jobs_ratio IS DISTINCT FROM employees_workplace / employees_residence
         """
@@ -237,7 +195,7 @@ def test_sector_view_covers_every_kreis_and_land_with_an_explicit_status() -> No
         for level, status, count in _all(
             """
             SELECT level, employees_total_status, COUNT(*)
-            FROM analytical.de_current_sectors GROUP BY 1, 2
+            FROM analytical.current_sectors GROUP BY 1, 2
             """
         )
     )
@@ -247,7 +205,7 @@ def test_sector_view_covers_every_kreis_and_land_with_an_explicit_status() -> No
     bases = {
         (level, basis)
         for level, basis in _all(
-            "SELECT DISTINCT level, metal_electrical_steel_basis FROM analytical.de_current_sectors"
+            "SELECT DISTINCT level, metal_electrical_steel_basis FROM analytical.current_sectors"
         )
     }
     assert {basis for level, basis in bases if level == "krs"} == {"published"}
@@ -256,14 +214,14 @@ def test_sector_view_covers_every_kreis_and_land_with_an_explicit_status() -> No
     statuses = {
         row[0]
         for row in _all(
-            "SELECT DISTINCT motor_vehicles_status FROM analytical.de_current_sectors WHERE level = 'krs'"
+            "SELECT DISTINCT motor_vehicles_status FROM analytical.current_sectors WHERE level = 'krs'"
         )
     }
     assert statuses == {"not_published_at_level"}
     # A share exists exactly where both values are published.
     mismatches = _one(
         """
-        SELECT COUNT(*) FROM analytical.de_current_sectors
+        SELECT COUNT(*) FROM analytical.current_sectors
         WHERE (metal_electrical_steel_share_status = 'value')
               <> (metal_electrical_steel_status = 'value' AND employees_total_status = 'value')
            OR metal_electrical_steel_share IS DISTINCT FROM
@@ -280,8 +238,8 @@ def test_regionalreport_counts_employees_at_place_of_work() -> None:
     compared, different = _one(
         """
         SELECT COUNT(*), COUNT(*) FILTER (WHERE r.value <> g.value)
-        FROM normalized.de_indicator_value AS r
-        JOIN normalized.de_indicator_value AS g
+        FROM normalized.indicator_value AS r
+        JOIN normalized.indicator_value AS g
           ON g.level = 'krs' AND g.region_key = r.region_key
          AND g.reference_date = r.reference_date
          AND g.geography_version = r.geography_version

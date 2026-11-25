@@ -13,4 +13,4 @@ docker compose --env-file .env -f docker/postgres.yml down --volumes
 docker compose --env-file .env -f docker/postgres.yml up -d postgres
 
 echo "Database volume recreated."
-echo "Run: bash scripts/bootstrap_database.sh"
+echo "Run: uv run --env-file .env python -m src.run_static"

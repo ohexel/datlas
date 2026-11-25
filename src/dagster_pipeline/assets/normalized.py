@@ -2,29 +2,30 @@ from dataclasses import asdict
 
 import dagster as dg
 
+from src.dagster_pipeline.groups import STATIC_GROUP
+
 from src.dagster_pipeline.assets.raw import (
-    GERMANY_GROUP,
-    RAW_DE_VG250_KEY,
-    RAW_DE_ZENSUS2022_POPULATION_KEY,
+    RAW_VG250_KEY,
+    RAW_ZENSUS2022_POPULATION_KEY,
 )
 from src.ingestion.contract import GEOGRAPHY_VERSION
 from src.database.normalize import refresh_hierarchy, refresh_population
 
 
-NORMALIZED_DE_HIERARCHY_KEY = dg.AssetKey(["normalized", "de_hierarchy"])
-NORMALIZED_DE_POPULATION_KEY = dg.AssetKey(["normalized", "de_population"])
+NORMALIZED_HIERARCHY_KEY = dg.AssetKey(["normalized", "hierarchy"])
+NORMALIZED_POPULATION_KEY = dg.AssetKey(["normalized", "population"])
 
 
 @dg.asset(
-    key=NORMALIZED_DE_HIERARCHY_KEY,
-    deps=[RAW_DE_VG250_KEY],
-    group_name=GERMANY_GROUP,
+    key=NORMALIZED_HIERARCHY_KEY,
+    deps=[RAW_VG250_KEY],
+    group_name=STATIC_GROUP,
     description=(
-        "normalized.de_land, de_kreis and de_gemeinde: VG250 land parts "
+        "normalized.land, kreis and gemeinde: VG250 land parts "
         "(GF = 4) with parent keys, EPSG:3035 geometry and area."
     ),
 )
-def normalized_de_hierarchy(context: dg.AssetExecutionContext) -> None:
+def normalized_hierarchy(context: dg.AssetExecutionContext) -> None:
     summary = refresh_hierarchy()
     context.add_output_metadata(
         {"geography_version": GEOGRAPHY_VERSION, **asdict(summary)}
@@ -32,24 +33,24 @@ def normalized_de_hierarchy(context: dg.AssetExecutionContext) -> None:
 
 
 @dg.asset(
-    key=NORMALIZED_DE_POPULATION_KEY,
-    deps=[NORMALIZED_DE_HIERARCHY_KEY, RAW_DE_ZENSUS2022_POPULATION_KEY],
-    group_name=GERMANY_GROUP,
+    key=NORMALIZED_POPULATION_KEY,
+    deps=[NORMALIZED_HIERARCHY_KEY, RAW_ZENSUS2022_POPULATION_KEY],
+    group_name=STATIC_GROUP,
     description=(
-        "normalized.de_gemeinde_population (Zensus 2022 total population "
+        "normalized.gemeinde_population (Zensus 2022 total population "
         "per Gemeinde; NULL with an explicit status, never 0, when there is "
-        "no census record) and de_zensus_published_population (published "
+        "no census record) and zensus_published_population (published "
         "Bund/Land/Kreis/Gemeinde totals for source checks)."
     ),
 )
-def normalized_de_population(context: dg.AssetExecutionContext) -> None:
+def normalized_population(context: dg.AssetExecutionContext) -> None:
     summary = refresh_population()
     context.add_output_metadata(
         {"geography_version": GEOGRAPHY_VERSION, **asdict(summary)}
     )
 
 
-GERMANY_NORMALIZED_ASSETS = [
-    normalized_de_hierarchy,
-    normalized_de_population,
+NORMALIZED_ASSETS = [
+    normalized_hierarchy,
+    normalized_population,
 ]

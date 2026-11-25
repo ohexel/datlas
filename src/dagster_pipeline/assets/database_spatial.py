@@ -1,5 +1,7 @@
 import dagster as dg
 
+from src.dagster_pipeline.groups import STATIC_GROUP
+
 from src.database.connection import database_connection
 from src.database.schema import apply_base_schema
 from src.icon_grid_contract import (
@@ -21,7 +23,7 @@ NORMALIZED_ICON_CELL_KEY = dg.AssetKey(
 
 @dg.asset(
     key=RAW_ICON_GRID_KEY,
-    group_name="raw",
+    group_name=STATIC_GROUP,
     description=(
         "Decoded DWD ICON D2 grid vertices and "
         "cell topology loaded into PostgreSQL."
@@ -63,7 +65,7 @@ def raw_icon_grid(
 @dg.asset(
     key=NORMALIZED_ICON_CELL_KEY,
     deps=[RAW_ICON_GRID_KEY],
-    group_name="normalized",
+    group_name=STATIC_GROUP,
     description=(
         "Every ICON grid cell as a triangle in EPSG:3035, "
         "constructed and validated by PostGIS."

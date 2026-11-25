@@ -1,7 +1,7 @@
 """Theme-independent indicators on the Germany hierarchy (ADR 019).
 
-normalized.de_indicator_source and normalized.de_indicator hold the
-catalogue, filled from the source contracts here; normalized.de_indicator_value
+normalized.indicator_source and normalized.indicator hold the
+catalogue, filled from the source contracts here; normalized.indicator_value
 holds one row per region, level, indicator and reference date. The first
 source is the BA Gemeindedaten; a further source adds its catalogue rows and
 its own refresh function, the tables stay as they are.
@@ -38,7 +38,7 @@ def upsert_ba_catalogue(connection: Connection) -> None:
     contract = BA_GEMEINDEDATEN_CONTRACT
     connection.execute(
         """
-        INSERT INTO normalized.de_indicator_source
+        INSERT INTO normalized.indicator_source
             (source_code, title, publisher, homepage, citation, terms, update_cycle)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         ON CONFLICT (source_code) DO UPDATE SET
@@ -62,7 +62,7 @@ def upsert_ba_catalogue(connection: Connection) -> None:
     with connection.cursor() as cursor:
         cursor.executemany(
             """
-            INSERT INTO normalized.de_indicator
+            INSERT INTO normalized.indicator
                 (indicator_code, source_code, label_de, unit, source_column, is_additive)
             VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (indicator_code) DO UPDATE SET
@@ -93,14 +93,14 @@ def refresh_ba_indicators(
     with database_connection(application_name="datlas_indicators") as connection:
         apply_indicator_schema(connection)
         upsert_ba_catalogue(connection)
-        connection.execute("ANALYZE raw.de_ba_gemeindedaten")
-        connection.execute("ANALYZE normalized.de_indicator")
+        connection.execute("ANALYZE raw.ba_gemeindedaten")
+        connection.execute("ANALYZE normalized.indicator")
         rows = connection.execute(
-            "SELECT * FROM normalized.refresh_de_ba_indicators(%s, %s)",
+            "SELECT * FROM normalized.refresh_ba_indicators(%s, %s)",
             (reference_date, geography_version),
         ).fetchall()
     if not rows:
-        raise RuntimeError("refresh_de_ba_indicators returned no summary")
+        raise RuntimeError("refresh_ba_indicators returned no summary")
     return IndicatorRefreshSummary(
         reference_date=reference_date.isoformat(),
         geography_version=geography_version,
@@ -110,7 +110,7 @@ def refresh_ba_indicators(
 
 def latest_loaded_reference_date(connection: Connection) -> date | None:
     row = connection.execute(
-        "SELECT MAX(reference_date) FROM raw.de_ba_gemeindedaten"
+        "SELECT MAX(reference_date) FROM raw.ba_gemeindedaten"
     ).fetchone()
     return None if row is None else row[0]
 
@@ -143,7 +143,7 @@ def upsert_sector_catalogue(connection: Connection) -> None:
     for contract in (BA_REGIONALREPORT_CONTRACT, BA_WZ_HEFT_CONTRACT):
         connection.execute(
             """
-            INSERT INTO normalized.de_indicator_source
+            INSERT INTO normalized.indicator_source
                 (source_code, title, publisher, homepage, citation, terms, update_cycle)
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (source_code) DO UPDATE SET
@@ -164,7 +164,7 @@ def upsert_sector_catalogue(connection: Connection) -> None:
     for wz_code, label in connection.execute(
         """
         SELECT DISTINCT ON (wz_code) wz_code, wz_label
-        FROM raw.de_ba_wz_heft
+        FROM raw.ba_wz_heft
         WHERE wz_code ~ '^[0-9]{2}$' OR wz_code IN ('241', 'total', 'XX')
         ORDER BY wz_code, file_date DESC
         """
@@ -185,7 +185,7 @@ def upsert_sector_catalogue(connection: Connection) -> None:
     with connection.cursor() as cursor:
         cursor.executemany(
             """
-            INSERT INTO normalized.de_indicator
+            INSERT INTO normalized.indicator
                 (indicator_code, source_code, label_de, unit, source_column, is_additive)
             VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (indicator_code) DO UPDATE SET
@@ -200,10 +200,10 @@ def upsert_sector_catalogue(connection: Connection) -> None:
         if missing:
             raise RuntimeError(f"WZ divisions missing from the booklets: {missing}")
         cursor.execute(
-            "DELETE FROM normalized.de_indicator_sum_component WHERE derived_code LIKE 'wz_sum_%'"
+            "DELETE FROM normalized.indicator_sum_component WHERE derived_code LIKE 'wz_sum_%'"
         )
         cursor.executemany(
-            "INSERT INTO normalized.de_indicator_sum_component VALUES (%s, %s)", components
+            "INSERT INTO normalized.indicator_sum_component VALUES (%s, %s)", components
         )
 
 
@@ -213,11 +213,11 @@ def upsert_sector_quality_notes(connection: Connection) -> None:
     from src.ingestion.contract import SECTOR_SOURCE_DISCREPANCIES
 
     connection.execute(
-        "DELETE FROM normalized.de_indicator_quality_note WHERE source_code = 'ba_regionalreport'"
+        "DELETE FROM normalized.indicator_quality_note WHERE source_code = 'ba_regionalreport'"
     )
     with connection.cursor() as cursor:
         cursor.executemany(
-            "INSERT INTO normalized.de_indicator_quality_note VALUES ('ba_regionalreport', %s, %s, %s, %s)",
+            "INSERT INTO normalized.indicator_quality_note VALUES ('ba_regionalreport', %s, %s, %s, %s)",
             [
                 (level, key, d.quarter, d.note_de)
                 for d in SECTOR_SOURCE_DISCREPANCIES
@@ -232,19 +232,19 @@ def refresh_sectors(geography_version: str = GEOGRAPHY_VERSION) -> IndicatorRefr
     with database_connection(application_name="datlas_sectors") as connection:
         apply_sector_schema(connection)
         upsert_sector_catalogue(connection)
-        for table in ("raw.de_ba_regionalreport", "raw.de_ba_wz_heft", "normalized.de_indicator",
-                      "normalized.de_indicator_sum_component"):
+        for table in ("raw.ba_regionalreport", "raw.ba_wz_heft", "normalized.indicator",
+                      "normalized.indicator_sum_component"):
             connection.execute(f"ANALYZE {table}")
         rows = connection.execute(
-            "SELECT * FROM normalized.refresh_de_ba_sectors(%s, %s)",
+            "SELECT * FROM normalized.refresh_ba_sectors(%s, %s)",
             (geography_version, sector_row_indicators()),
         ).fetchall()
         upsert_sector_quality_notes(connection)
         newest = connection.execute(
-            "SELECT MAX(file_date) FROM raw.de_ba_regionalreport"
+            "SELECT MAX(file_date) FROM raw.ba_regionalreport"
         ).fetchone()[0]
     if not rows:
-        raise RuntimeError("refresh_de_ba_sectors returned no summary")
+        raise RuntimeError("refresh_ba_sectors returned no summary")
     return IndicatorRefreshSummary(
         reference_date=newest.isoformat() if newest else "",
         geography_version=geography_version,

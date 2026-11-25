@@ -1,15 +1,14 @@
--- Germany layer, indicators: a theme-independent catalogue and value table,
--- and the first source loaded into it (BA Gemeindedaten, ADR 019).
--- Additive and idempotent: only de_-prefixed objects; Berlin objects are
--- never touched. Requires normalized_schema.sql (hierarchy) first.
+-- Indicators: a theme-independent catalogue and value table, and the first
+-- source loaded into it (BA Gemeindedaten, ADR 019). Idempotent; requires
+-- normalized_schema.sql (hierarchy) first.
 
 -- ---------------------------------------------------------------------------
--- raw.de_ba_gemeindedaten: the two data sheets of the BA xlsx, as delivered.
+-- raw.ba_gemeindedaten: the two data sheets of the BA xlsx, as delivered.
 -- One row per region row. Values stay text: '*' is the BA's sign for a
 -- suppressed value (Geheimhaltung). Regions are on the territorial status of
 -- the reference date, not on the geography version of the hierarchy.
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS raw.de_ba_gemeindedaten (
+CREATE TABLE IF NOT EXISTS raw.ba_gemeindedaten (
     source_row_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     sheet_name text NOT NULL,
     sheet_row integer NOT NULL,
@@ -40,7 +39,7 @@ CREATE TABLE IF NOT EXISTS raw.de_ba_gemeindedaten (
     UNIQUE (reference_date, sheet_name, source_key)
 );
 
-COMMENT ON TABLE raw.de_ba_gemeindedaten IS
+COMMENT ON TABLE raw.ba_gemeindedaten IS
     'Statistik der Bundesagentur für Arbeit, Gemeindedaten der '
     'sozialversicherungspflichtig Beschäftigten nach Wohn- und Arbeitsort '
     '(product 229), sheets Gemeindedaten and Länder, as delivered. column_NN '
@@ -50,7 +49,7 @@ COMMENT ON TABLE raw.de_ba_gemeindedaten IS
 -- Indicator catalogue: one row per source and per indicator. Filled from the
 -- source contracts in Python (src/database/indicators.py).
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS normalized.de_indicator_source (
+CREATE TABLE IF NOT EXISTS normalized.indicator_source (
     source_code text PRIMARY KEY,
     title text NOT NULL,
     publisher text NOT NULL,
@@ -60,9 +59,9 @@ CREATE TABLE IF NOT EXISTS normalized.de_indicator_source (
     update_cycle text NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS normalized.de_indicator (
+CREATE TABLE IF NOT EXISTS normalized.indicator (
     indicator_code text PRIMARY KEY CHECK (indicator_code ~ '^[a-z0-9_]+$'),
-    source_code text NOT NULL REFERENCES normalized.de_indicator_source,
+    source_code text NOT NULL REFERENCES normalized.indicator_source,
     label_de text NOT NULL,
     unit text NOT NULL,
     source_column integer,
@@ -80,11 +79,11 @@ CREATE TABLE IF NOT EXISTS normalized.de_indicator (
 -- region_key: Land key, Kreis key, Gemeinde ARS, or 'DG' for Germany.
 -- source_key: the key in the source (BA: 8-digit AGS for Gemeinden).
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS normalized.de_indicator_value (
+CREATE TABLE IF NOT EXISTS normalized.indicator_value (
     geography_version text NOT NULL,
     level text NOT NULL CHECK (level IN ('sta', 'lan', 'krs', 'gem')),
     region_key text NOT NULL,
-    indicator_code text NOT NULL REFERENCES normalized.de_indicator,
+    indicator_code text NOT NULL REFERENCES normalized.indicator,
     reference_date date NOT NULL,
     value double precision CHECK (value >= 0),
     value_status text NOT NULL
@@ -98,14 +97,14 @@ CREATE TABLE IF NOT EXISTS normalized.de_indicator_value (
     CHECK ((value_status = 'not_reported') = (status_reason IS NOT NULL))
 );
 
-CREATE INDEX IF NOT EXISTS de_indicator_value_vintage_idx
-    ON normalized.de_indicator_value (indicator_code, reference_date);
+CREATE INDEX IF NOT EXISTS indicator_value_vintage_idx
+    ON normalized.indicator_value (indicator_code, reference_date);
 
 -- ---------------------------------------------------------------------------
 -- BA rows in long form, on the BA's own territorial status: one row per
 -- region row and indicator. Used by the refresh and by the source checks.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.de_ba_long(p_reference_date date)
+CREATE OR REPLACE FUNCTION normalized.ba_long(p_reference_date date)
 RETURNS TABLE(
     sheet_name text,
     source_level text,
@@ -129,8 +128,8 @@ RETURNS TABLE(
         v.source_value,
         CASE WHEN v.source_value ~ '^[0-9]+$' THEN v.source_value::bigint END,
         r.source_sha256
-    FROM raw.de_ba_gemeindedaten AS r
-    CROSS JOIN normalized.de_indicator AS i
+    FROM raw.ba_gemeindedaten AS r
+    CROSS JOIN normalized.indicator AS i
     CROSS JOIN LATERAL (
         SELECT (ARRAY[
             r.column_01, r.column_02, r.column_03, r.column_04, r.column_05,
@@ -153,7 +152,7 @@ $$;
 -- The BA's own Kreis and Land values are served, not sums of Gemeinden: they
 -- include the values suppressed at Gemeinde level (BA, Erläuterungen).
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.refresh_de_ba_indicators(
+CREATE OR REPLACE FUNCTION normalized.refresh_ba_indicators(
     p_reference_date date,
     p_geography_version text
 ) RETURNS TABLE(
@@ -165,31 +164,31 @@ CREATE OR REPLACE FUNCTION normalized.refresh_de_ba_indicators(
     AS $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM raw.de_ba_gemeindedaten WHERE reference_date = p_reference_date
+        SELECT 1 FROM raw.ba_gemeindedaten WHERE reference_date = p_reference_date
     ) THEN
         RAISE EXCEPTION 'No raw BA rows for reference_date=%', p_reference_date;
     END IF;
     IF EXISTS (
-        SELECT 1 FROM normalized.de_ba_long(p_reference_date) AS l
+        SELECT 1 FROM normalized.ba_long(p_reference_date) AS l
         WHERE l.value IS NULL AND l.source_value <> '*'
     ) THEN
         RAISE EXCEPTION 'BA values other than digits or * for %', p_reference_date;
     END IF;
 
-    DELETE FROM normalized.de_indicator_value AS d
-    USING normalized.de_indicator AS i
+    DELETE FROM normalized.indicator_value AS d
+    USING normalized.indicator AS i
     WHERE d.indicator_code = i.indicator_code
       AND i.source_code = 'ba_gemeindedaten'
       AND d.reference_date = p_reference_date
       AND d.geography_version = p_geography_version;
 
-    INSERT INTO normalized.de_indicator_value (
+    INSERT INTO normalized.indicator_value (
         geography_version, level, region_key, indicator_code, reference_date,
         value, value_status, status_reason, source_key, source_value,
         source_sha256
     )
     WITH ba AS (
-        SELECT * FROM normalized.de_ba_long(p_reference_date)
+        SELECT * FROM normalized.ba_long(p_reference_date)
     ),
     -- Source row per region of the hierarchy (NULL: the BA has no row).
     match AS (
@@ -197,22 +196,22 @@ BEGIN
                'gem'::text AS source_level, 'Gemeindedaten'::text AS sheet_name,
                CASE WHEN g.is_unincorporated THEN 'no_source_record_unincorporated'
                     ELSE 'no_source_record' END AS reason_if_missing
-        FROM normalized.de_gemeinde AS g
+        FROM normalized.gemeinde AS g
         WHERE g.geography_version = p_geography_version
         UNION ALL
         SELECT 'krs', k.kreis_key,
                COALESCE(kreis_row.source_key, single.source_key),
                CASE WHEN kreis_row.source_key IS NULL THEN 'gem' ELSE 'krs' END,
                'Gemeindedaten', 'no_source_record'
-        FROM normalized.de_kreis AS k
-        LEFT JOIN raw.de_ba_gemeindedaten AS kreis_row
+        FROM normalized.kreis AS k
+        LEFT JOIN raw.ba_gemeindedaten AS kreis_row
           ON kreis_row.reference_date = p_reference_date
          AND kreis_row.sheet_name = 'Gemeindedaten'
          AND kreis_row.source_level = 'krs'
          AND kreis_row.source_key = k.kreis_key
         LEFT JOIN (
             SELECT left(r.source_key, 5) AS kreis_key, MIN(r.source_key) AS source_key
-            FROM raw.de_ba_gemeindedaten AS r
+            FROM raw.ba_gemeindedaten AS r
             WHERE r.reference_date = p_reference_date
               AND r.sheet_name = 'Gemeindedaten'
               AND r.source_level = 'gem'
@@ -222,7 +221,7 @@ BEGIN
         WHERE k.geography_version = p_geography_version
         UNION ALL
         SELECT 'lan', l.land_key, l.land_key, 'lan', 'Gemeindedaten', 'no_source_record'
-        FROM normalized.de_land AS l
+        FROM normalized.land AS l
         WHERE l.geography_version = p_geography_version
         UNION ALL
         SELECT 'sta', 'DG', 'DG', 'sta', 'Länder', 'no_source_record'
@@ -244,7 +243,7 @@ BEGIN
         b.source_value,
         b.source_sha256
     FROM match AS m
-    CROSS JOIN normalized.de_indicator AS i
+    CROSS JOIN normalized.indicator AS i
     LEFT JOIN ba AS b
       ON b.sheet_name = m.sheet_name
      AND b.source_level = m.source_level
@@ -254,8 +253,8 @@ BEGIN
 
     RETURN QUERY
     SELECT d.level, d.value_status, COUNT(*)
-    FROM normalized.de_indicator_value AS d
-    JOIN normalized.de_indicator AS i USING (indicator_code)
+    FROM normalized.indicator_value AS d
+    JOIN normalized.indicator AS i USING (indicator_code)
     WHERE i.source_code = 'ba_gemeindedaten'
       AND d.reference_date = p_reference_date
       AND d.geography_version = p_geography_version
@@ -267,7 +266,7 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Check: key coverage between the BA file and the hierarchy.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.check_de_ba_key_coverage(
+CREATE OR REPLACE FUNCTION normalized.check_ba_key_coverage(
     p_reference_date date,
     p_geography_version text
 ) RETURNS TABLE(
@@ -279,30 +278,30 @@ CREATE OR REPLACE FUNCTION normalized.check_de_ba_key_coverage(
     LANGUAGE sql STABLE
     AS $$
     SELECT 'source_without_geography', r.source_level, r.source_key, r.source_name
-    FROM raw.de_ba_gemeindedaten AS r
+    FROM raw.ba_gemeindedaten AS r
     WHERE r.reference_date = p_reference_date
       AND r.sheet_name = 'Gemeindedaten'
       AND (
           (r.source_level = 'gem' AND NOT EXISTS (
-              SELECT 1 FROM normalized.de_gemeinde AS g
+              SELECT 1 FROM normalized.gemeinde AS g
               WHERE g.geography_version = p_geography_version AND g.ags = r.source_key))
        OR (r.source_level = 'krs' AND NOT EXISTS (
-              SELECT 1 FROM normalized.de_kreis AS k
+              SELECT 1 FROM normalized.kreis AS k
               WHERE k.geography_version = p_geography_version AND k.kreis_key = r.source_key))
        OR (r.source_level = 'lan' AND NOT EXISTS (
-              SELECT 1 FROM normalized.de_land AS l
+              SELECT 1 FROM normalized.land AS l
               WHERE l.geography_version = p_geography_version AND l.land_key = r.source_key))
       )
     UNION ALL
     SELECT d.status_reason, d.level,
            CASE WHEN d.level = 'gem' THEN g.ags ELSE d.region_key END,
            COALESCE(g.gemeinde_name, k.kreis_name, l.land_name, 'Deutschland')
-    FROM normalized.de_indicator_value AS d
-    LEFT JOIN normalized.de_gemeinde AS g
+    FROM normalized.indicator_value AS d
+    LEFT JOIN normalized.gemeinde AS g
       ON d.level = 'gem' AND g.geography_version = d.geography_version AND g.ars = d.region_key
-    LEFT JOIN normalized.de_kreis AS k
+    LEFT JOIN normalized.kreis AS k
       ON d.level = 'krs' AND k.geography_version = d.geography_version AND k.kreis_key = d.region_key
-    LEFT JOIN normalized.de_land AS l
+    LEFT JOIN normalized.land AS l
       ON d.level = 'lan' AND l.geography_version = d.geography_version AND l.land_key = d.region_key
     WHERE d.reference_date = p_reference_date
       AND d.geography_version = p_geography_version
@@ -320,7 +319,7 @@ $$;
 --   krs_to_lan: Σ Kreise (Kreis rows plus single-Gemeinde Kreise) vs Land.
 --   lan_to_sta: Σ Länder plus the unassigned row vs "Deutschland".
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.check_de_ba_source_totals(
+CREATE OR REPLACE FUNCTION normalized.check_ba_source_totals(
     p_reference_date date
 ) RETURNS TABLE(
     comparison text,
@@ -333,7 +332,7 @@ CREATE OR REPLACE FUNCTION normalized.check_de_ba_source_totals(
     LANGUAGE sql STABLE
     AS $$
     WITH l AS MATERIALIZED (
-        SELECT * FROM normalized.de_ba_long(p_reference_date) WHERE is_additive
+        SELECT * FROM normalized.ba_long(p_reference_date) WHERE is_additive
     ),
     kreis_rows AS (
         SELECT * FROM l WHERE sheet_name = 'Gemeindedaten' AND source_level = 'krs'
@@ -344,7 +343,7 @@ CREATE OR REPLACE FUNCTION normalized.check_de_ba_source_totals(
         SELECT g.* FROM l AS g
         WHERE g.sheet_name = 'Gemeindedaten' AND g.source_level = 'gem'
           AND left(g.source_key, 5) NOT IN (
-              SELECT r.source_key FROM raw.de_ba_gemeindedaten AS r
+              SELECT r.source_key FROM raw.ba_gemeindedaten AS r
               WHERE r.reference_date = p_reference_date
                 AND r.sheet_name = 'Gemeindedaten'
                 AND r.source_level = 'krs')
@@ -400,7 +399,7 @@ $$;
 -- whose other place is unknown are not counted as commuters). A rule is
 -- skipped for a row where one of its values is suppressed.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.check_de_ba_identities(
+CREATE OR REPLACE FUNCTION normalized.check_ba_identities(
     p_reference_date date
 ) RETURNS TABLE(
     rule text,
@@ -422,7 +421,7 @@ CREATE OR REPLACE FUNCTION normalized.check_de_ba_identities(
             MAX(l.value) FILTER (WHERE l.indicator_code = 'employees_residence_equals_workplace') AS same,
             MAX(l.value) FILTER (WHERE l.indicator_code = 'commuters_in') AS c_in,
             MAX(l.value) FILTER (WHERE l.indicator_code = 'commuters_out') AS c_out
-        FROM normalized.de_ba_long(p_reference_date) AS l
+        FROM normalized.ba_long(p_reference_date) AS l
         GROUP BY l.sheet_name, l.source_key
     )
     SELECT 'residence = men + women', sheet_name, source_key, source_name
@@ -444,17 +443,17 @@ $$;
 -- map shows. jobs_ratio (employees at place of work / employees at place of
 -- residence) is this project's own calculation from two published values.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE VIEW normalized.de_current_indicator_vintage AS
+CREATE OR REPLACE VIEW normalized.current_indicator_vintage AS
 SELECT DISTINCT ON (i.source_code)
     i.source_code, d.reference_date, d.geography_version
-FROM normalized.de_indicator_value AS d
-JOIN normalized.de_indicator AS i USING (indicator_code)
+FROM normalized.indicator_value AS d
+JOIN normalized.indicator AS i USING (indicator_code)
 ORDER BY i.source_code, d.reference_date DESC, d.geography_version DESC;
 
-CREATE OR REPLACE VIEW analytical.de_current_employment AS
+CREATE OR REPLACE VIEW analytical.current_employment AS
 WITH vintage AS (
     SELECT reference_date, geography_version
-    FROM normalized.de_current_indicator_vintage
+    FROM normalized.current_indicator_vintage
     WHERE source_code = 'ba_gemeindedaten'
 ),
 wide AS (
@@ -474,7 +473,7 @@ wide AS (
         MAX(d.value) FILTER (WHERE d.indicator_code = 'establishments') AS establishments,
         MAX(d.value_status) FILTER (WHERE d.indicator_code = 'establishments') AS establishments_status,
         MAX(d.status_reason) FILTER (WHERE d.indicator_code = 'employees_residence') AS not_reported_reason
-    FROM normalized.de_indicator_value AS d
+    FROM normalized.indicator_value AS d
     JOIN vintage AS v
       ON v.reference_date = d.reference_date
      AND v.geography_version = d.geography_version
@@ -518,14 +517,14 @@ SELECT
         ELSE 'value'
     END AS jobs_ratio_status
 FROM wide AS w
-LEFT JOIN normalized.de_gemeinde AS g
+LEFT JOIN normalized.gemeinde AS g
   ON w.level = 'gem' AND g.geography_version = w.geography_version AND g.ars = w.region_key
-LEFT JOIN normalized.de_kreis AS k
+LEFT JOIN normalized.kreis AS k
   ON w.level = 'krs' AND k.geography_version = w.geography_version AND k.kreis_key = w.region_key
-LEFT JOIN normalized.de_land AS l
+LEFT JOIN normalized.land AS l
   ON w.level = 'lan' AND l.geography_version = w.geography_version AND l.land_key = w.region_key;
 
-COMMENT ON VIEW analytical.de_current_employment IS
+COMMENT ON VIEW analytical.current_employment IS
     'BA Gemeindedaten, newest reference date, per Gemeinde/Kreis/Land/Germany: '
     'employees at place of work and of residence, commuters, establishments '
     '(published values with status) and jobs_ratio = workplace / residence '

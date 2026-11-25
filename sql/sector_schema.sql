@@ -1,16 +1,16 @@
--- Germany layer, sectors (third theme, ADR 020): BA Regionalreport per Kreis
--- and BA Beschäftigte nach Wirtschaftszweigen per Land, in the indicator
--- tables of ADR 019. Additive and idempotent: only de_-prefixed objects.
--- Requires normalized_schema.sql and indicator_schema.sql first.
+-- Sectors (third theme, ADR 020): BA Regionalreport per Kreis and BA
+-- Beschäftigte nach Wirtschaftszweigen per Land, in the indicator tables of
+-- ADR 019. Idempotent; requires normalized_schema.sql and
+-- indicator_schema.sql first.
 
 -- ---------------------------------------------------------------------------
--- raw.de_ba_regionalreport: tables 2.3 (sections and manufacturing groups)
+-- raw.ba_regionalreport: tables 2.3 (sections and manufacturing groups)
 -- and 2.1 (totals of the Kreis, its Land, West/East and Germany) of one
 -- Regionalreport per Kreis, as delivered: one row per table row and
 -- quarter. Each file holds five quarters; a quarter appears in up to five
 -- files and the newest file wins. '*' = suppressed by the BA.
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS raw.de_ba_regionalreport (
+CREATE TABLE IF NOT EXISTS raw.ba_regionalreport (
     source_row_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     file_date date NOT NULL,
     kreis_key text NOT NULL CHECK (kreis_key ~ '^[0-9]{5}$'),
@@ -29,21 +29,21 @@ CREATE TABLE IF NOT EXISTS raw.de_ba_regionalreport (
     UNIQUE (file_date, kreis_key, table_name, sheet_row, quarter_date)
 );
 
-CREATE INDEX IF NOT EXISTS de_ba_regionalreport_quarter_idx
-    ON raw.de_ba_regionalreport (table_name, quarter_date, kreis_key);
+CREATE INDEX IF NOT EXISTS ba_regionalreport_quarter_idx
+    ON raw.ba_regionalreport (table_name, quarter_date, kreis_key);
 
-COMMENT ON TABLE raw.de_ba_regionalreport IS
+COMMENT ON TABLE raw.ba_regionalreport IS
     'Statistik der Bundesagentur für Arbeit, Regionalreport über Beschäftigte '
     '(Quartalszahlen, product 709), tables 2.1 and 2.3 per Kreis, employees '
     'subject to social insurance at place of work, as delivered. Germany layer.';
 
 -- ---------------------------------------------------------------------------
--- raw.de_ba_wz_heft: sheet "SVB - Tabelle I" of the WZ booklet of one Land or
+-- raw.ba_wz_heft: sheet "SVB - Tabelle I" of the WZ booklet of one Land or
 -- Germany, as delivered: one row per WZ code ('total', 2-digit divisions,
 -- 3-digit groups, 'XX' = keine Angabe), column_values = the BA's columns 1-11
 -- (1 = Insgesamt).
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS raw.de_ba_wz_heft (
+CREATE TABLE IF NOT EXISTS raw.ba_wz_heft (
     source_row_id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     file_date date NOT NULL,
     region_key text NOT NULL CHECK (region_key ~ '^([0-9]{2}|DG)$'),
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS raw.de_ba_wz_heft (
     UNIQUE (file_date, region_key, wz_code)
 );
 
-COMMENT ON TABLE raw.de_ba_wz_heft IS
+COMMENT ON TABLE raw.ba_wz_heft IS
     'Statistik der Bundesagentur für Arbeit, Beschäftigte nach '
     'Wirtschaftszweigen (WZ 2008) (Quartalszahlen), sheet SVB - Tabelle I per '
     'Land and Germany, as delivered. Germany layer.';
@@ -69,9 +69,9 @@ COMMENT ON TABLE raw.de_ba_wz_heft IS
 -- example a Land value of a Regionalreport group from the WZ divisions it
 -- consists of. Filled from the contracts in Python.
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS normalized.de_indicator_sum_component (
-    derived_code text NOT NULL REFERENCES normalized.de_indicator,
-    component_code text NOT NULL REFERENCES normalized.de_indicator,
+CREATE TABLE IF NOT EXISTS normalized.indicator_sum_component (
+    derived_code text NOT NULL REFERENCES normalized.indicator,
+    component_code text NOT NULL REFERENCES normalized.indicator,
     PRIMARY KEY (derived_code, component_code)
 );
 
@@ -85,7 +85,7 @@ CREATE TABLE IF NOT EXISTS normalized.de_indicator_sum_component (
 -- level every region gets a row per indicator and quarter, with
 -- 'not_reported' where no file was loaded.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.refresh_de_ba_sectors(
+CREATE OR REPLACE FUNCTION normalized.refresh_ba_sectors(
     p_geography_version text,
     p_row_indicators text[]
 ) RETURNS TABLE(
@@ -97,13 +97,13 @@ CREATE OR REPLACE FUNCTION normalized.refresh_de_ba_sectors(
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    DELETE FROM normalized.de_indicator_value AS d
-    USING normalized.de_indicator AS i
+    DELETE FROM normalized.indicator_value AS d
+    USING normalized.indicator AS i
     WHERE d.indicator_code = i.indicator_code
       AND i.source_code IN ('ba_regionalreport', 'ba_wz_heft')
       AND d.geography_version = p_geography_version;
 
-    INSERT INTO normalized.de_indicator_value (
+    INSERT INTO normalized.indicator_value (
         geography_version, level, region_key, indicator_code, reference_date,
         value, value_status, status_reason, source_key, source_value,
         source_sha256
@@ -114,7 +114,7 @@ BEGIN
                    PARTITION BY r.file_date, r.kreis_key, r.quarter_date
                    ORDER BY r.sheet_row
                ) AS position
-        FROM raw.de_ba_regionalreport AS r
+        FROM raw.ba_regionalreport AS r
         WHERE r.table_name = '2.3'
     ),
     newest AS (
@@ -138,9 +138,9 @@ BEGIN
         CASE WHEN m.value IS NOT NULL THEN k.kreis_key END,
         m.value,
         m.source_sha256
-    FROM normalized.de_kreis AS k
+    FROM normalized.kreis AS k
     CROSS JOIN quarters AS q
-    CROSS JOIN normalized.de_indicator AS i
+    CROSS JOIN normalized.indicator AS i
     LEFT JOIN mapped AS m
       ON m.kreis_key = k.kreis_key
      AND m.quarter_date = q.quarter_date
@@ -149,14 +149,14 @@ BEGIN
       AND i.source_code = 'ba_regionalreport'
       AND i.source_column IS NOT NULL;
 
-    INSERT INTO normalized.de_indicator_value (
+    INSERT INTO normalized.indicator_value (
         geography_version, level, region_key, indicator_code, reference_date,
         value, value_status, status_reason, source_key, source_value,
         source_sha256
     )
     WITH regions AS (
         SELECT 'lan'::text AS level, l.land_key AS region_key
-        FROM normalized.de_land AS l
+        FROM normalized.land AS l
         WHERE l.geography_version = p_geography_version
         UNION ALL
         SELECT 'sta', 'DG'
@@ -167,9 +167,9 @@ BEGIN
                               WHEN 'XX' THEN 'wz_unassigned'
                               ELSE 'wz_' || w.wz_code END AS indicator_code,
                w.column_values[1] AS value
-        FROM raw.de_ba_wz_heft AS w
+        FROM raw.ba_wz_heft AS w
     ),
-    quarters AS (SELECT DISTINCT file_date FROM raw.de_ba_wz_heft)
+    quarters AS (SELECT DISTINCT file_date FROM raw.ba_wz_heft)
     SELECT
         p_geography_version, r.level, r.region_key, i.indicator_code, q.file_date,
         CASE WHEN b.value ~ '^[0-9]+$' THEN b.value::double precision END,
@@ -181,7 +181,7 @@ BEGIN
         b.source_sha256
     FROM regions AS r
     CROSS JOIN quarters AS q
-    CROSS JOIN normalized.de_indicator AS i
+    CROSS JOIN normalized.indicator AS i
     LEFT JOIN booklet AS b
       ON b.region_key = r.region_key
      AND b.file_date = q.file_date
@@ -191,8 +191,8 @@ BEGIN
 
     RETURN QUERY
     SELECT i.source_code, d.level, d.value_status, COUNT(*)
-    FROM normalized.de_indicator_value AS d
-    JOIN normalized.de_indicator AS i USING (indicator_code)
+    FROM normalized.indicator_value AS d
+    JOIN normalized.indicator AS i USING (indicator_code)
     WHERE i.source_code IN ('ba_regionalreport', 'ba_wz_heft')
       AND d.geography_version = p_geography_version
     GROUP BY 1, 2, 3
@@ -203,7 +203,7 @@ $$;
 -- ---------------------------------------------------------------------------
 -- Table 2.3 in wide form per Kreis and quarter (newest file), by position.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.de_ba_regionalreport_wide(p_file_date date)
+CREATE OR REPLACE FUNCTION normalized.ba_regionalreport_wide(p_file_date date)
 RETURNS TABLE(
     kreis_key text,
     quarter_date date,
@@ -217,7 +217,7 @@ RETURNS TABLE(
         r.quarter_date,
         array_agg(CASE WHEN r.value ~ '^[0-9]+$' THEN r.value::bigint END ORDER BY r.sheet_row),
         array_agg(r.value = '*' ORDER BY r.sheet_row)
-    FROM raw.de_ba_regionalreport AS r
+    FROM raw.ba_regionalreport AS r
     WHERE r.file_date = p_file_date AND r.table_name = '2.3'
     GROUP BY r.kreis_key, r.quarter_date
 $$;
@@ -230,7 +230,7 @@ $$;
 -- 23 unassigned, 24 A (sectors), 25 B-F, 26 G-U. Exact where no part is
 -- suppressed; otherwise the published total must be at least the visible sum.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.check_de_ba_sector_identities(p_file_date date)
+CREATE OR REPLACE FUNCTION normalized.check_ba_sector_identities(p_file_date date)
 RETURNS TABLE(
     rule text,
     kreis_key text,
@@ -241,7 +241,7 @@ RETURNS TABLE(
 )
     LANGUAGE sql STABLE
     AS $$
-    WITH w AS (SELECT * FROM normalized.de_ba_regionalreport_wide(p_file_date)),
+    WITH w AS (SELECT * FROM normalized.ba_regionalreport_wide(p_file_date)),
     rules(rule, lhs, parts) AS (
         VALUES
             ('total = sections + unassigned', 1,
@@ -289,7 +289,7 @@ $$;
 --                         place of work, where both exist for the date
 -- suppressed_parts > 0: the published value must be at least the sum.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.check_de_ba_sector_totals(
+CREATE OR REPLACE FUNCTION normalized.check_ba_sector_totals(
     p_file_date date,
     p_geography_version text
 ) RETURNS TABLE(
@@ -303,17 +303,17 @@ CREATE OR REPLACE FUNCTION normalized.check_de_ba_sector_totals(
 )
     LANGUAGE sql STABLE
     AS $$
-    WITH w AS MATERIALIZED (SELECT * FROM normalized.de_ba_regionalreport_wide(p_file_date)),
+    WITH w AS MATERIALIZED (SELECT * FROM normalized.ba_regionalreport_wide(p_file_date)),
     land_rows AS MATERIALIZED (
         SELECT DISTINCT left(r.kreis_key, 2) AS land_key, r.quarter_date,
                r.value::bigint AS total
-        FROM raw.de_ba_regionalreport AS r
+        FROM raw.ba_regionalreport AS r
         WHERE r.file_date = p_file_date AND r.table_name = '2.1'
           AND r.region_label LIKE 'Bundesland %' AND r.row_code = 'Insgesamt'
     ),
     germany_row AS MATERIALIZED (
         SELECT DISTINCT r.quarter_date, r.value::bigint AS total
-        FROM raw.de_ba_regionalreport AS r
+        FROM raw.ba_regionalreport AS r
         WHERE r.file_date = p_file_date AND r.table_name = '2.1'
           AND r.region_label = 'Deutschland' AND r.row_code = 'Insgesamt'
     ),
@@ -321,11 +321,11 @@ CREATE OR REPLACE FUNCTION normalized.check_de_ba_sector_totals(
         SELECT b.region_key, b.wz_code, b.file_date,
                CASE WHEN b.column_values[1] ~ '^[0-9]+$' THEN b.column_values[1]::bigint END AS value,
                b.column_values[1] = '*' AS suppressed
-        FROM raw.de_ba_wz_heft AS b
+        FROM raw.ba_wz_heft AS b
     ),
     groups(item, position, wz_prefix) AS (
         SELECT c.derived_code, g.position, substr(c.component_code, 4)
-        FROM normalized.de_indicator_sum_component AS c
+        FROM normalized.indicator_sum_component AS c
         JOIN (VALUES ('wz_sum_c', 4), ('wz_sum_consumer_goods', 5),
                      ('wz_sum_metal_electrical_steel', 6),
                      ('wz_sum_intermediate_goods', 7)) AS g(code, position)
@@ -389,7 +389,7 @@ CREATE OR REPLACE FUNCTION normalized.check_de_ba_sector_totals(
            g.total - (SELECT SUM(l.total) FROM land_rows AS l WHERE l.quarter_date = g.quarter_date)::bigint,
            0
     FROM germany_row AS g
-    JOIN raw.de_ba_gemeindedaten AS u
+    JOIN raw.ba_gemeindedaten AS u
       ON u.reference_date = g.quarter_date
      AND u.sheet_name = 'Länder' AND u.source_level = 'unassigned'
      AND u.column_09 ~ '^[0-9]+$'
@@ -397,7 +397,7 @@ CREATE OR REPLACE FUNCTION normalized.check_de_ba_sector_totals(
     SELECT 'kreis_vs_gemeindedaten', w.kreis_key, 'total', w.quarter_date, d.value::bigint,
            w.v[1], CASE WHEN w.s[1] THEN 1 ELSE 0 END
     FROM w
-    JOIN normalized.de_indicator_value AS d
+    JOIN normalized.indicator_value AS d
       ON d.level = 'krs' AND d.region_key = w.kreis_key
      AND d.indicator_code = 'employees_workplace'
      AND d.reference_date = w.quarter_date
@@ -410,8 +410,8 @@ $$;
 -- source published but that are evidently incomplete). Filled from the
 -- contracts in Python; shown with the region on the map.
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS normalized.de_indicator_quality_note (
-    source_code text NOT NULL REFERENCES normalized.de_indicator_source,
+CREATE TABLE IF NOT EXISTS normalized.indicator_quality_note (
+    source_code text NOT NULL REFERENCES normalized.indicator_source,
     level text NOT NULL CHECK (level IN ('sta', 'lan', 'krs', 'gem')),
     region_key text NOT NULL,
     reference_date date NOT NULL,
@@ -430,21 +430,21 @@ CREATE TABLE IF NOT EXISTS normalized.de_indicator_quality_note (
 --                     every Kreis value is published and no quality note
 --                     exists for the Kreise of that Land and quarter.
 -- Both agree exactly wherever both are complete (check
--- de_ba_sector_source_totals). Otherwise the group is 'suppressed'. A share
+-- ba_sector_source_totals). Otherwise the group is 'suppressed'. A share
 -- is computed only from two values.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE VIEW analytical.de_current_sectors AS
+CREATE OR REPLACE VIEW analytical.current_sectors AS
 WITH geo AS (
     SELECT MAX(d.geography_version) AS geography_version
-    FROM normalized.de_indicator_value AS d
-    JOIN normalized.de_indicator AS i USING (indicator_code)
+    FROM normalized.indicator_value AS d
+    JOIN normalized.indicator AS i USING (indicator_code)
     WHERE i.source_code IN ('ba_regionalreport', 'ba_wz_heft')
 ),
 dates AS (
     SELECT
         MAX(d.reference_date) FILTER (WHERE d.indicator_code = 'sector_total') AS kreis_date,
         MAX(d.reference_date) FILTER (WHERE d.indicator_code = 'wz_total') AS land_date
-    FROM normalized.de_indicator_value AS d, geo
+    FROM normalized.indicator_value AS d, geo
     WHERE d.geography_version = geo.geography_version
       AND d.indicator_code IN ('sector_total', 'wz_total')
 ),
@@ -464,7 +464,7 @@ items(indicator_code, item) AS (
 values_ AS (
     SELECT d.*,
            CASE WHEN d.level = 'krs' THEN dates.kreis_date ELSE dates.land_date END AS current_date_
-    FROM normalized.de_indicator_value AS d, geo, dates
+    FROM normalized.indicator_value AS d, geo, dates
     WHERE d.geography_version = geo.geography_version
 ),
 direct AS (
@@ -482,7 +482,7 @@ division_sums AS (
                 WHEN bool_or(v.value_status = 'not_reported') THEN 'not_reported'
                 ELSE 'value' END AS value_status
     FROM values_ AS v
-    JOIN normalized.de_indicator_sum_component AS c ON c.component_code = v.indicator_code
+    JOIN normalized.indicator_sum_component AS c ON c.component_code = v.indicator_code
     JOIN items AS it ON it.indicator_code = c.derived_code
     WHERE v.level IN ('lan', 'sta')
       AND v.reference_date IN (v.current_date_, (v.current_date_ - interval '1 year')::date)
@@ -493,7 +493,7 @@ kreis_sums AS (
     SELECT 'lan'::text AS level, left(v.region_key, 2) AS region_key, v.reference_date, it.item,
            CASE WHEN bool_and(v.value_status = 'value') THEN SUM(v.value) END AS value,
            bool_and(v.value_status = 'value') AS complete
-    FROM normalized.de_indicator_value AS v, geo, dates
+    FROM normalized.indicator_value AS v, geo, dates
     JOIN items AS it ON TRUE
     WHERE v.geography_version = geo.geography_version
       AND v.level = 'krs'
@@ -516,7 +516,7 @@ chosen_sums AS (
     LEFT JOIN kreis_sums AS k
       ON k.level = d.level AND k.region_key = d.region_key
      AND k.reference_date = d.reference_date AND k.item = d.item
-    LEFT JOIN normalized.de_indicator_quality_note AS n
+    LEFT JOIN normalized.indicator_quality_note AS n
       ON n.source_code = 'ba_regionalreport' AND n.level = 'lan'
      AND n.region_key = d.region_key AND n.reference_date = d.reference_date
 ),
@@ -591,17 +591,17 @@ SELECT
     CASE WHEN w.level = 'krs' THEN 'not_published_at_level' ELSE COALESCE(w.steel_status, 'not_reported') END AS steel_status,
     n.note_de AS quality_note
 FROM wide AS w
-LEFT JOIN normalized.de_kreis AS k
+LEFT JOIN normalized.kreis AS k
   ON w.level = 'krs' AND k.kreis_key = w.region_key
  AND k.geography_version = (SELECT geography_version FROM geo)
-LEFT JOIN normalized.de_land AS la
+LEFT JOIN normalized.land AS la
   ON w.level = 'lan' AND la.land_key = w.region_key
  AND la.geography_version = (SELECT geography_version FROM geo)
-LEFT JOIN normalized.de_indicator_quality_note AS n
+LEFT JOIN normalized.indicator_quality_note AS n
   ON n.level = w.level AND n.region_key = w.region_key AND n.reference_date = w.reference_date
  AND n.source_code = CASE WHEN w.level = 'krs' THEN 'ba_regionalreport' ELSE 'ba_wz_heft' END;
 
-COMMENT ON VIEW analytical.de_current_sectors IS
+COMMENT ON VIEW analytical.current_sectors IS
     'Employees by sector, newest quarter: Kreise from the BA Regionalreport '
     '(sections and manufacturing groups as published), Länder and Germany '
     'from the BA WZ booklets (divisions 29, 28, 20, 24.1 as published; groups '

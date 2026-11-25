@@ -45,11 +45,11 @@ def test_partition_aggregation_and_retention_keeps_two_runs() -> None:
         with connection.transaction(force_rollback=True):
             apply_forecast_schema(connection)
             connection.execute(
-                "INSERT INTO normalized.de_land VALUES (%s,'99','Fixland',%s,2e6,'f')",
+                "INSERT INTO normalized.land VALUES (%s,'99','Fixland',%s,2e6,'f')",
                 (FIXTURE, land),
             )
             connection.execute(
-                "INSERT INTO normalized.de_kreis VALUES (%s,'99001','99','Fixkreis','Kreis',NULL,%s,2e6,'f')",
+                "INSERT INTO normalized.kreis VALUES (%s,'99001','99','Fixkreis','Kreis',NULL,%s,2e6,'f')",
                 (FIXTURE, land),
             )
             for ars, ags, geometry in (
@@ -57,7 +57,7 @@ def test_partition_aggregation_and_retention_keeps_two_runs() -> None:
                 ("990010000002", "99001002", gem_b),
             ):
                 connection.execute(
-                    "INSERT INTO normalized.de_gemeinde VALUES "
+                    "INSERT INTO normalized.gemeinde VALUES "
                     "(%s,%s,%s,'99001','99','G','Gemeinde',false,%s,1e6,'f')",
                     (FIXTURE, ars, ags, geometry),
                 )
@@ -68,31 +68,31 @@ def test_partition_aggregation_and_retention_keeps_two_runs() -> None:
                 )
             for cell, ars, fraction in bridge_rows:
                 connection.execute(
-                    "INSERT INTO normalized.de_icon_cell_gemeinde_bridge VALUES "
+                    "INSERT INTO normalized.icon_cell_gemeinde_bridge VALUES "
                     "(%s,%s,%s,%s,%s,1e6,%s)",
                     (FIXTURE, GRID, cell, ars, fraction * 1e6, fraction),
                 )
 
             def load_partition(run_time: datetime, hour: int, rows: list[tuple]) -> None:
                 connection.execute(
-                    "CREATE TEMP TABLE de_cell_stage (cell_index integer PRIMARY KEY, "
+                    "CREATE TEMP TABLE cell_stage (cell_index integer PRIMARY KEY, "
                     "temperature_k double precision, relative_humidity_percent "
                     "double precision, wind_u_10m_ms double precision, "
                     "wind_v_10m_ms double precision)"
                 )
                 copy_rows(
-                    connection, schema="pg_temp", table="de_cell_stage",
+                    connection, schema="pg_temp", table="cell_stage",
                     columns=("cell_index", "temperature_k",
                              "relative_humidity_percent", "wind_u_10m_ms",
                              "wind_v_10m_ms"),
                     rows=rows,
                 )
                 connection.execute(
-                    "SELECT * FROM normalized.refresh_de_forecast_partition(%s,%s,%s,%s,%s)",
+                    "SELECT * FROM normalized.refresh_forecast_partition(%s,%s,%s,%s,%s)",
                     (run_time, f"PT{hour:03d}H00M", run_time + timedelta(hours=hour),
                      FIXTURE, GRID),
                 )
-                connection.execute("DROP TABLE pg_temp.de_cell_stage")
+                connection.execute("DROP TABLE pg_temp.cell_stage")
 
             def load_run(run_time: datetime, leads: int) -> None:
                 for hour in range(leads):
@@ -118,7 +118,7 @@ def test_partition_aggregation_and_retention_keeps_two_runs() -> None:
             # the mean of (10, 80, 1) and (15, 60, 1), queried on 2026-11-14.
             sql_values = dict(
                 connection.execute(
-                    "SELECT ars, apparent_temperature_shade_c FROM normalized.de_gemeinde_forecast "
+                    "SELECT ars, apparent_temperature_shade_c FROM normalized.gemeinde_forecast "
                     "WHERE geography_version = %s AND run_time_utc = %s AND lead_time = 'PT000H00M'",
                     (FIXTURE, runs[0]),
                 ).fetchall()
@@ -127,21 +127,21 @@ def test_partition_aggregation_and_retention_keeps_two_runs() -> None:
             assert sql_values["990010000002"] == pytest.approx(11.103011743711562, abs=1e-12)
 
             current = connection.execute(
-                "SELECT run_time_utc FROM normalized.de_forecast_run_completeness "
+                "SELECT run_time_utc FROM normalized.forecast_run_completeness "
                 "WHERE geography_version = %s AND is_complete ORDER BY 1 DESC LIMIT 1",
                 (FIXTURE,),
             ).fetchone()[0]
             assert current == runs[2]  # incomplete newer run is not current
 
             kept, cells, gemeinden = connection.execute(
-                "SELECT * FROM normalized.prune_de_forecast(%s, 2)", (FIXTURE,)
+                "SELECT * FROM normalized.prune_forecast(%s, 2)", (FIXTURE,)
             ).fetchone()
             assert kept == runs[1]
             assert gemeinden == 2 * 25
             assert cells == 3 * 25
             remaining = [
                 r[0] for r in connection.execute(
-                    "SELECT DISTINCT run_time_utc FROM normalized.de_gemeinde_forecast "
+                    "SELECT DISTINCT run_time_utc FROM normalized.gemeinde_forecast "
                     "WHERE geography_version = %s ORDER BY 1",
                     (FIXTURE,),
                 )
@@ -177,25 +177,25 @@ def test_summaries_take_the_earliest_hour_on_a_tie() -> None:
         with connection.transaction(force_rollback=True):
             apply_forecast_schema(connection)
             connection.execute(
-                "INSERT INTO normalized.de_land VALUES (%s,'99','Fixland',%s,1e6,'f')", (version, square)
+                "INSERT INTO normalized.land VALUES (%s,'99','Fixland',%s,1e6,'f')", (version, square)
             )
             connection.execute(
-                "INSERT INTO normalized.de_kreis VALUES (%s,'99001','99','Fixkreis','Kreis',NULL,%s,1e6,'f')",
+                "INSERT INTO normalized.kreis VALUES (%s,'99001','99','Fixkreis','Kreis',NULL,%s,1e6,'f')",
                 (version, square),
             )
             connection.execute(
-                "INSERT INTO normalized.de_gemeinde VALUES "
+                "INSERT INTO normalized.gemeinde VALUES "
                 "(%s,%s,'99001001','99001','99','Fixdorf','Gemeinde',false,%s,1e6,'f')",
                 (version, ars, square),
             )
             connection.execute(
-                "INSERT INTO normalized.de_gemeinde_population VALUES "
+                "INSERT INTO normalized.gemeinde_population VALUES "
                 "(%s,%s,100,'census_value','100','2022-05-15','fixture','f')",
                 (version, ars),
             )
             with connection.cursor() as cursor:
                 cursor.executemany(
-                    "INSERT INTO normalized.de_gemeinde_forecast VALUES (%s,%s,%s,%s,'fixture_grid',%s,%s,%s)",
+                    "INSERT INTO normalized.gemeinde_forecast VALUES (%s,%s,%s,%s,'fixture_grid',%s,%s,%s)",
                     [
                         (run, f"PT{hour:03d}H00M", run + timedelta(hours=hour), version, ars,
                          temperature.get(hour, 5.0), apparent.get(hour, 2.0))
@@ -203,7 +203,7 @@ def test_summaries_take_the_earliest_hour_on_a_tie() -> None:
                     ],
                 )
             assert connection.execute(
-                "SELECT run_time_utc FROM analytical.de_current_run"
+                "SELECT run_time_utc FROM analytical.current_run"
             ).fetchone()[0] == run
 
             gemeinde = connection.execute(
@@ -211,7 +211,7 @@ def test_summaries_take_the_earliest_hour_on_a_tie() -> None:
                 SELECT max_temperature_at_berlin, min_temperature_at_berlin,
                        max_apparent_temperature_shade_at_berlin,
                        min_apparent_temperature_shade_at_berlin
-                FROM analytical.de_current_gemeinde_summary WHERE ars = %s
+                FROM analytical.current_gemeinde_summary WHERE ars = %s
                 """,
                 (ars,),
             ).fetchone()
@@ -224,7 +224,7 @@ def test_summaries_take_the_earliest_hour_on_a_tie() -> None:
             }
             hours = {
                 level: dict(zip(columns, connection.execute(
-                    f"SELECT {', '.join(columns)} FROM analytical.de_current_{level}_summary"
+                    f"SELECT {', '.join(columns)} FROM analytical.current_{level}_summary"
                 ).fetchone()))
                 for level in ("kreis", "land", "bund")
             }

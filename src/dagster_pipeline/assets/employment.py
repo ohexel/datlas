@@ -11,8 +11,8 @@ from datetime import date
 import dagster as dg
 import requests
 
-from src.dagster_pipeline.assets.normalized import NORMALIZED_DE_HIERARCHY_KEY
-from src.dagster_pipeline.assets.raw import GERMANY_GROUP
+from src.dagster_pipeline.assets.normalized import NORMALIZED_HIERARCHY_KEY
+from src.dagster_pipeline.groups import EMPLOYMENT_GROUP
 from src.ingestion.ba_gemeindedaten import (
     acquire_ba_gemeindedaten,
     load_ba_gemeindedaten_raw,
@@ -21,8 +21,8 @@ from src.ingestion.contract import BA_GEMEINDEDATEN_CONTRACT, GEOGRAPHY_VERSION
 from src.database.indicators import refresh_ba_indicators
 
 
-RAW_DE_BA_GEMEINDEDATEN_KEY = dg.AssetKey(["raw", "de_ba_gemeindedaten"])
-NORMALIZED_DE_INDICATOR_VALUE_KEY = dg.AssetKey(["normalized", "de_indicator_value"])
+RAW_BA_GEMEINDEDATEN_KEY = dg.AssetKey(["raw", "ba_gemeindedaten"])
+NORMALIZED_INDICATOR_VALUE_KEY = dg.AssetKey(["normalized", "indicator_value"])
 
 
 class BaGemeindedatenConfig(dg.Config):
@@ -30,15 +30,15 @@ class BaGemeindedatenConfig(dg.Config):
 
 
 @dg.asset(
-    key=RAW_DE_BA_GEMEINDEDATEN_KEY,
-    group_name=GERMANY_GROUP,
+    key=RAW_BA_GEMEINDEDATEN_KEY,
+    group_name=EMPLOYMENT_GROUP,
     description=(
         "BA Gemeindedaten (employees by place of residence and of work, "
         "commuters, establishments; yearly, 30 June) as delivered, after the "
         "structural contract and, for a known vintage, the checksum."
     ),
 )
-def raw_de_ba_gemeindedaten(
+def raw_ba_gemeindedaten(
     context: dg.AssetExecutionContext, config: BaGemeindedatenConfig
 ) -> None:
     reference_date = date.fromisoformat(config.reference_date)
@@ -59,17 +59,17 @@ def raw_de_ba_gemeindedaten(
 
 
 @dg.asset(
-    key=NORMALIZED_DE_INDICATOR_VALUE_KEY,
-    deps=[RAW_DE_BA_GEMEINDEDATEN_KEY, NORMALIZED_DE_HIERARCHY_KEY],
-    group_name=GERMANY_GROUP,
+    key=NORMALIZED_INDICATOR_VALUE_KEY,
+    deps=[RAW_BA_GEMEINDEDATEN_KEY, NORMALIZED_HIERARCHY_KEY],
+    group_name=EMPLOYMENT_GROUP,
     description=(
-        "normalized.de_indicator_value: BA values on the Germany hierarchy, "
+        "normalized.indicator_value: BA values on the Germany hierarchy, "
         "one row per region, level, indicator and reference date, with an "
         "explicit status (value, suppressed, not_reported). Served by "
-        "analytical.de_current_employment."
+        "analytical.current_employment."
     ),
 )
-def normalized_de_indicator_value(
+def normalized_indicator_value(
     context: dg.AssetExecutionContext, config: BaGemeindedatenConfig
 ) -> None:
     summary = refresh_ba_indicators(
@@ -78,7 +78,7 @@ def normalized_de_indicator_value(
     context.add_output_metadata(asdict(summary))
 
 
-GERMANY_EMPLOYMENT_ASSETS = [
-    raw_de_ba_gemeindedaten,
-    normalized_de_indicator_value,
+EMPLOYMENT_ASSETS = [
+    raw_ba_gemeindedaten,
+    normalized_indicator_value,
 ]

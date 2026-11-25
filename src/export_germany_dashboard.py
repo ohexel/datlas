@@ -9,7 +9,7 @@ Two kinds of data are written to <output>/data/:
   normalized.de_* (VG250 31.12.2022), carrying only their regional key.
   Built once with tippecanoe; reused until the geography version changes
   or --rebuild-tiles is given. Never rebuilt per forecast run.
-* values.json: the current complete forecast run (analytical.de_current_*),
+* values.json: the current complete forecast run (analytical.current_*),
   keyed by regional code and joined client-side.
 
 The serving web host must answer HTTP Range requests (PMTiles); the local
@@ -50,15 +50,15 @@ TILE_MAX_ZOOM = 10
 GEOMETRY_QUERIES = {
     "lan": """
         SELECT land_key, ST_AsGeoJSON(ST_Transform(geometry, 4326), 6)
-        FROM normalized.de_land WHERE geography_version = %s ORDER BY 1
+        FROM normalized.land WHERE geography_version = %s ORDER BY 1
     """,
     "krs": """
         SELECT kreis_key, ST_AsGeoJSON(ST_Transform(geometry, 4326), 6)
-        FROM normalized.de_kreis WHERE geography_version = %s ORDER BY 1
+        FROM normalized.kreis WHERE geography_version = %s ORDER BY 1
     """,
     "gem": """
         SELECT ars, ST_AsGeoJSON(ST_Transform(geometry, 4326), 6)
-        FROM normalized.de_gemeinde WHERE geography_version = %s ORDER BY 1
+        FROM normalized.gemeinde WHERE geography_version = %s ORDER BY 1
     """,
 }
 
@@ -68,7 +68,7 @@ SELECT run_time_utc, lead_hour, valid_time_utc,
        apparent_temperature_shade_area_weighted_c,
        apparent_temperature_shade_population_weighted_c,
        population_total
-FROM analytical.de_current_bund_forecast_25h
+FROM analytical.current_bund_forecast_25h
 ORDER BY lead_hour
 """
 
@@ -110,10 +110,10 @@ GEMEINDE_QUERY = """
 SELECT s.ars, s.gemeinde_name, s.kreis_key, s.land_key,
        """ + ", ".join(f"s.{f}, s.{_time_key(f)}" for f in GEMEINDE_FIELDS) + """,
        s.population_total, s.population_status, g.gemeinde_type
-FROM analytical.de_current_gemeinde_summary AS s
-JOIN normalized.de_gemeinde AS g
+FROM analytical.current_gemeinde_summary AS s
+JOIN normalized.gemeinde AS g
   ON g.ars = s.ars
- AND g.geography_version = (SELECT geography_version FROM analytical.de_current_run)
+ AND g.geography_version = (SELECT geography_version FROM analytical.current_run)
 ORDER BY s.ars
 """
 
@@ -122,14 +122,14 @@ SUMMARY_QUERIES = {
         SELECT kreis_key, kreis_name, land_key, lead_time_count,
                """ + _SUMMARY_COLUMNS + """,
                population_total, gemeinde_count
-        FROM analytical.de_current_kreis_summary
+        FROM analytical.current_kreis_summary
         ORDER BY kreis_key
     """,
     "lan": """
         SELECT land_key, land_name, NULL::text, lead_time_count,
                """ + _SUMMARY_COLUMNS + """,
                population_total, gemeinde_count
-        FROM analytical.de_current_land_summary
+        FROM analytical.current_land_summary
         ORDER BY land_key
     """,
 }
@@ -137,10 +137,10 @@ SUMMARY_QUERIES = {
 BUND_QUERY = (
     "SELECT "
     + ", ".join(f"{field}, {lead_hour_key(field)}" for field in BUND_FIELDS)
-    + " FROM analytical.de_current_bund_summary"
+    + " FROM analytical.current_bund_summary"
 )
 
-# Second theme: employment (BA Gemeindedaten), from analytical.de_current_employment.
+# Second theme: employment (BA Gemeindedaten), from analytical.current_employment.
 EMPLOYMENT_MEASURES = (
     "employees_workplace",
     "employees_residence",
@@ -152,12 +152,12 @@ EMPLOYMENT_QUERY = """
 SELECT level, region_key, reference_date, geography_version,
        """ + ",\n       ".join(f"{m}, {m}_status" for m in EMPLOYMENT_MEASURES) + """,
        not_reported_reason, jobs_ratio, jobs_ratio_status
-FROM analytical.de_current_employment
+FROM analytical.current_employment
 ORDER BY level, region_key
 """
 JOBS_RATIO_STATUSES = frozenset({"value", "suppressed", "not_reported", "not_computable"})
 
-# Third theme: employees by sector, from analytical.de_current_sectors.
+# Third theme: employees by sector, from analytical.current_sectors.
 SECTOR_MEASURES = (
     "employees_total",
     "manufacturing",
@@ -177,7 +177,7 @@ SELECT level, region_key, reference_date,
        metal_electrical_steel_share, metal_electrical_steel_share_status,
        """ + ", ".join(f"{g}_basis" for g in SECTOR_GROUPS) + """,
        quality_note
-FROM analytical.de_current_sectors
+FROM analytical.current_sectors
 ORDER BY level, region_key
 """
 SECTOR_STATUSES = frozenset(
@@ -185,7 +185,7 @@ SECTOR_STATUSES = frozenset(
 )
 
 KREIS_TYPE_QUERY = """
-SELECT kreis_key, kreis_type FROM normalized.de_kreis WHERE geography_version = %s
+SELECT kreis_key, kreis_type FROM normalized.kreis WHERE geography_version = %s
 """
 
 # ---------------------------------------------------------------------------
@@ -206,7 +206,7 @@ def _berlin_label(value: datetime) -> str:
 
 def summary_records(rows: list[tuple]) -> dict[str, dict[str, object]]:
     """Per region: 24-hour maxima and minima (and their lead hour) of both weightings,
-    as computed by the analytical.de_current_*_summary views."""
+    as computed by the analytical.current_*_summary views."""
     records: dict[str, dict[str, object]] = {}
     for key, name, parent, lead_count, *rest in rows:
         measures, population, count = rest[:-2], rest[-2], rest[-1]
@@ -234,7 +234,7 @@ def summary_records(rows: list[tuple]) -> dict[str, dict[str, object]]:
 
 def collect_values(connection: psycopg.Connection) -> dict[str, object]:
     current = connection.execute(
-        "SELECT geography_version, run_time_utc FROM analytical.de_current_run"
+        "SELECT geography_version, run_time_utc FROM analytical.current_run"
     ).fetchone()
     if current is None:
         raise RuntimeError("No complete Germany forecast run; run src.run_forecast")
@@ -365,7 +365,7 @@ def sector_record(row: tuple) -> dict[str, object]:
 def collect_sectors(connection: psycopg.Connection) -> dict[str, object] | None:
     """sectors.json, or None when the sector data is not loaded."""
     exists = connection.execute(
-        "SELECT to_regclass('analytical.de_current_sectors') IS NOT NULL"
+        "SELECT to_regclass('analytical.current_sectors') IS NOT NULL"
     ).fetchone()[0]
     if not exists:
         return None
@@ -389,7 +389,7 @@ def collect_sectors(connection: psycopg.Connection) -> dict[str, object] | None:
         for code, title, publisher, citation, homepage in connection.execute(
             """
             SELECT source_code, title, publisher, citation, homepage
-            FROM normalized.de_indicator_source
+            FROM normalized.indicator_source
             WHERE source_code IN ('ba_regionalreport', 'ba_wz_heft')
             """
         )
@@ -411,7 +411,7 @@ def collect_sectors(connection: psycopg.Connection) -> dict[str, object] | None:
 def collect_employment(connection: psycopg.Connection) -> dict[str, object] | None:
     """employment.json, or None when the BA data is not loaded."""
     exists = connection.execute(
-        "SELECT to_regclass('analytical.de_current_employment') IS NOT NULL"
+        "SELECT to_regclass('analytical.current_employment') IS NOT NULL"
     ).fetchone()[0]
     if not exists:
         return None
@@ -440,7 +440,7 @@ def collect_employment(connection: psycopg.Connection) -> dict[str, object] | No
     source = connection.execute(
         """
         SELECT title, publisher, citation, homepage
-        FROM normalized.de_indicator_source WHERE source_code = 'ba_gemeindedaten'
+        FROM normalized.indicator_source WHERE source_code = 'ba_gemeindedaten'
         """
     ).fetchone()
     (reference_date,) = reference_dates

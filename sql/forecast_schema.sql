@@ -1,6 +1,6 @@
--- Germany layer, forecast: grid subset, cell-Gemeinde bridge, forecast facts,
--- roll-up views, checks 4-6 and retention. Additive and idempotent: only
--- de_-prefixed objects; Berlin objects are read, never written.
+-- Forecast: cell-Gemeinde bridge, forecast facts, roll-up views, checks 4-6
+-- and retention. Idempotent; requires normalized_schema.sql (and through it
+-- base_schema.sql).
 
 -- ---------------------------------------------------------------------------
 -- Cell-Gemeinde bridge: the area of every ICON cell (normalized.icon_cell,
@@ -8,7 +8,7 @@
 -- of a forecast are the cells in the bridge. Area weights are computed in
 -- EPSG:3035 (ADR 014).
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS normalized.de_icon_cell_gemeinde_bridge (
+CREATE TABLE IF NOT EXISTS normalized.icon_cell_gemeinde_bridge (
     geography_version text NOT NULL,
     source_grid_id text NOT NULL,
     cell_index integer NOT NULL,
@@ -20,15 +20,15 @@ CREATE TABLE IF NOT EXISTS normalized.de_icon_cell_gemeinde_bridge (
         CHECK (fraction_of_gemeinde > 0 AND fraction_of_gemeinde <= 1.000001),
     PRIMARY KEY (geography_version, source_grid_id, ars, cell_index),
     FOREIGN KEY (geography_version, ars)
-        REFERENCES normalized.de_gemeinde (geography_version, ars),
+        REFERENCES normalized.gemeinde (geography_version, ars),
     FOREIGN KEY (source_grid_id, cell_index)
         REFERENCES normalized.icon_cell (source_grid_id, cell_index)
 );
 
 -- Lists the cells of a geography version and grid (load_cell_indices) and
 -- supports the foreign key to icon_cell.
-CREATE INDEX IF NOT EXISTS de_icon_cell_gemeinde_bridge_cell_idx
-    ON normalized.de_icon_cell_gemeinde_bridge (
+CREATE INDEX IF NOT EXISTS icon_cell_gemeinde_bridge_cell_idx
+    ON normalized.icon_cell_gemeinde_bridge (
         geography_version, source_grid_id, cell_index
     );
 
@@ -38,7 +38,7 @@ CREATE INDEX IF NOT EXISTS de_icon_cell_gemeinde_bridge_cell_idx
 -- ---------------------------------------------------------------------------
 -- One row per run: the geography version and grid the cell values belong
 -- to. Cell rows reference it, so they need not repeat these text keys.
-CREATE TABLE IF NOT EXISTS normalized.de_forecast_run (
+CREATE TABLE IF NOT EXISTS normalized.forecast_run (
     run_time_utc timestamp with time zone PRIMARY KEY,
     geography_version text NOT NULL,
     source_grid_id text NOT NULL
@@ -47,9 +47,9 @@ CREATE TABLE IF NOT EXISTS normalized.de_forecast_run (
 -- Per-cell values (decision B, slimmed 2026-11-09): run, lead hour and cell
 -- index only; lead_time label and valid time are derived (valid = run +
 -- lead_hour). double precision is kept: float4 would save only ~10 % more.
-CREATE TABLE IF NOT EXISTS normalized.de_icon_cell_value (
+CREATE TABLE IF NOT EXISTS normalized.icon_cell_value (
     run_time_utc timestamp with time zone NOT NULL
-        REFERENCES normalized.de_forecast_run (run_time_utc),
+        REFERENCES normalized.forecast_run (run_time_utc),
     lead_hour smallint NOT NULL CHECK (lead_hour BETWEEN 0 AND 24),
     cell_index integer NOT NULL,
     temperature_c double precision,
@@ -57,7 +57,7 @@ CREATE TABLE IF NOT EXISTS normalized.de_icon_cell_value (
     PRIMARY KEY (run_time_utc, lead_hour, cell_index)
 );
 
-CREATE TABLE IF NOT EXISTS normalized.de_gemeinde_forecast (
+CREATE TABLE IF NOT EXISTS normalized.gemeinde_forecast (
     run_time_utc timestamp with time zone NOT NULL,
     lead_time text NOT NULL,
     valid_time_utc timestamp with time zone NOT NULL,
@@ -68,13 +68,13 @@ CREATE TABLE IF NOT EXISTS normalized.de_gemeinde_forecast (
     apparent_temperature_shade_c double precision,
     PRIMARY KEY (run_time_utc, lead_time, geography_version, ars),
     FOREIGN KEY (geography_version, ars)
-        REFERENCES normalized.de_gemeinde (geography_version, ars)
+        REFERENCES normalized.gemeinde (geography_version, ars)
 );
 
 -- ---------------------------------------------------------------------------
 -- Refresh: Germany cells and bridge (static per geography and grid version)
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.refresh_de_icon_bridge(
+CREATE OR REPLACE FUNCTION normalized.refresh_icon_bridge(
     p_geography_version text,
     p_source_grid_id text
 ) RETURNS TABLE(
@@ -85,11 +85,17 @@ CREATE OR REPLACE FUNCTION normalized.refresh_de_icon_bridge(
     LANGUAGE plpgsql
     AS $$
 BEGIN
-    DELETE FROM normalized.de_icon_cell_gemeinde_bridge AS b
+    -- Fresh statistics for the spatial join. On a new database the cells and
+    -- Gemeinden are loaded seconds before; without them the join was planned
+    -- blind and took 8.5 instead of 2 minutes (measured 25 Nov 2026).
+    ANALYZE normalized.icon_cell;
+    ANALYZE normalized.gemeinde;
+
+    DELETE FROM normalized.icon_cell_gemeinde_bridge AS b
     WHERE b.geography_version = p_geography_version
       AND b.source_grid_id = p_source_grid_id;
 
-    INSERT INTO normalized.de_icon_cell_gemeinde_bridge
+    INSERT INTO normalized.icon_cell_gemeinde_bridge
     SELECT
         p_geography_version,
         p_source_grid_id,
@@ -105,7 +111,7 @@ BEGIN
             g.area_m2 AS gemeinde_area_m2,
             public.ST_Area(public.ST_Intersection(g.geometry, c.geometry))
                 AS intersection_area_m2
-        FROM normalized.de_gemeinde AS g
+        FROM normalized.gemeinde AS g
         JOIN normalized.icon_cell AS c
           ON c.source_grid_id = p_source_grid_id
          AND public.ST_Intersects(g.geometry, c.geometry)
@@ -116,25 +122,24 @@ BEGIN
     RETURN QUERY
     SELECT
         (SELECT COUNT(DISTINCT b.cell_index)
-         FROM normalized.de_icon_cell_gemeinde_bridge AS b
+         FROM normalized.icon_cell_gemeinde_bridge AS b
          WHERE b.geography_version = p_geography_version
            AND b.source_grid_id = p_source_grid_id),
-        (SELECT COUNT(*) FROM normalized.de_icon_cell_gemeinde_bridge AS b
+        (SELECT COUNT(*) FROM normalized.icon_cell_gemeinde_bridge AS b
          WHERE b.geography_version = p_geography_version
            AND b.source_grid_id = p_source_grid_id),
-        (SELECT COUNT(DISTINCT b.ars) FROM normalized.de_icon_cell_gemeinde_bridge AS b
+        (SELECT COUNT(DISTINCT b.ars) FROM normalized.icon_cell_gemeinde_bridge AS b
          WHERE b.geography_version = p_geography_version
            AND b.source_grid_id = p_source_grid_id);
 END;
 $$;
 
 -- ---------------------------------------------------------------------------
--- SQL aggregation of one partition. Input: pg_temp.de_cell_stage with the
--- four raw indicators of all Germany cells, staged by the caller. Units and
--- formulas are those of normalized.refresh_icon_d2_ruc_weather (Berlin):
--- K -> °C, wind speed from U/V, normalized.calculate_apparent_temperature_shade_c.
+-- SQL aggregation of one partition. Input: pg_temp.cell_stage with the
+-- four raw indicators of all bridge cells, staged by the caller: K -> °C,
+-- wind speed from U/V, normalized.calculate_apparent_temperature_shade_c.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.refresh_de_forecast_partition(
+CREATE OR REPLACE FUNCTION normalized.refresh_forecast_partition(
     p_run_time_utc timestamp with time zone,
     p_lead_time text,
     p_valid_time_utc timestamp with time zone,
@@ -152,7 +157,7 @@ DECLARE
     v_lead_hour smallint := (
         EXTRACT(EPOCH FROM (p_valid_time_utc - p_run_time_utc)) / 3600
     )::smallint;
-    v_run normalized.de_forecast_run%ROWTYPE;
+    v_run normalized.forecast_run%ROWTYPE;
     v_missing bigint;
 BEGIN
     IF p_lead_time <> format('PT%sH00M', lpad(v_lead_hour::text, 3, '0')) THEN
@@ -163,17 +168,17 @@ BEGIN
     -- error, not a suppressed value: the weighted means would silently use
     -- fewer cells, so the partition is refused and nothing is stored.
     SELECT COUNT(*) INTO v_missing
-    FROM pg_temp.de_cell_stage AS s
+    FROM pg_temp.cell_stage AS s
     WHERE s.temperature_k IS NULL OR s.relative_humidity_percent IS NULL
        OR s.wind_u_10m_ms IS NULL OR s.wind_v_10m_ms IS NULL;
     IF v_missing > 0 THEN
         RAISE EXCEPTION 'run % lead %: % staged cells have missing values',
             p_run_time_utc, p_lead_time, v_missing;
     END IF;
-    INSERT INTO normalized.de_forecast_run
+    INSERT INTO normalized.forecast_run
     VALUES (p_run_time_utc, p_geography_version, p_source_grid_id)
     ON CONFLICT (run_time_utc) DO NOTHING;
-    SELECT * INTO v_run FROM normalized.de_forecast_run AS r
+    SELECT * INTO v_run FROM normalized.forecast_run AS r
     WHERE r.run_time_utc = p_run_time_utc;
     IF v_run.geography_version <> p_geography_version
        OR v_run.source_grid_id <> p_source_grid_id THEN
@@ -182,13 +187,13 @@ BEGIN
             p_geography_version, p_source_grid_id;
     END IF;
 
-    DELETE FROM normalized.de_icon_cell_value AS w
+    DELETE FROM normalized.icon_cell_value AS w
     WHERE w.run_time_utc = p_run_time_utc AND w.lead_hour = v_lead_hour;
-    DELETE FROM normalized.de_gemeinde_forecast AS f
+    DELETE FROM normalized.gemeinde_forecast AS f
     WHERE f.run_time_utc = p_run_time_utc AND f.lead_time = p_lead_time
       AND f.geography_version = p_geography_version;
 
-    INSERT INTO normalized.de_icon_cell_value
+    INSERT INTO normalized.icon_cell_value
     SELECT
         p_run_time_utc,
         v_lead_hour,
@@ -206,11 +211,11 @@ BEGIN
             stage.relative_humidity_percent,
             SQRT(POWER(stage.wind_u_10m_ms, 2) + POWER(stage.wind_v_10m_ms, 2))
                 AS wind_speed_10m_ms
-        FROM pg_temp.de_cell_stage AS stage
+        FROM pg_temp.cell_stage AS stage
     ) AS physical;
     GET DIAGNOSTICS v_cells = ROW_COUNT;
 
-    INSERT INTO normalized.de_gemeinde_forecast
+    INSERT INTO normalized.gemeinde_forecast
     SELECT
         p_run_time_utc,
         p_lead_time,
@@ -222,8 +227,8 @@ BEGIN
             / SUM(b.fraction_of_gemeinde),
         SUM(w.apparent_temperature_shade_c * b.fraction_of_gemeinde)
             / SUM(b.fraction_of_gemeinde)
-    FROM normalized.de_icon_cell_gemeinde_bridge AS b
-    JOIN normalized.de_icon_cell_value AS w
+    FROM normalized.icon_cell_gemeinde_bridge AS b
+    JOIN normalized.icon_cell_value AS w
       ON w.run_time_utc = p_run_time_utc
      AND w.lead_hour = v_lead_hour
      AND w.cell_index = b.cell_index
@@ -238,25 +243,25 @@ $$;
 
 -- ---------------------------------------------------------------------------
 -- Completeness and the "current" run: newest run in which every Gemeinde has
--- all 25 lead times (same switching rule as Berlin's 25-hour views).
+-- all 25 lead times.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE VIEW normalized.de_forecast_run_completeness AS
+CREATE OR REPLACE VIEW normalized.forecast_run_completeness AS
 SELECT
     f.geography_version,
     f.run_time_utc,
     COUNT(DISTINCT f.lead_time) AS lead_time_count,
     COUNT(*) AS gemeinde_lead_row_count,
-    (SELECT COUNT(*) FROM normalized.de_gemeinde AS g
+    (SELECT COUNT(*) FROM normalized.gemeinde AS g
      WHERE g.geography_version = f.geography_version) * 25 AS expected_row_count,
-    COUNT(*) = (SELECT COUNT(*) FROM normalized.de_gemeinde AS g
+    COUNT(*) = (SELECT COUNT(*) FROM normalized.gemeinde AS g
                 WHERE g.geography_version = f.geography_version) * 25
         AND COUNT(DISTINCT f.lead_time) = 25 AS is_complete
-FROM normalized.de_gemeinde_forecast AS f
+FROM normalized.gemeinde_forecast AS f
 GROUP BY f.geography_version, f.run_time_utc;
 
-CREATE OR REPLACE VIEW analytical.de_current_run AS
+CREATE OR REPLACE VIEW analytical.current_run AS
 SELECT geography_version, run_time_utc
-FROM normalized.de_forecast_run_completeness
+FROM normalized.forecast_run_completeness
 WHERE is_complete
 ORDER BY run_time_utc DESC
 LIMIT 1;
@@ -264,7 +269,7 @@ LIMIT 1;
 -- ---------------------------------------------------------------------------
 -- Serving views (D5: measurements only, no thresholds or classes).
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE VIEW analytical.de_current_gemeinde_forecast_25h AS
+CREATE OR REPLACE VIEW analytical.current_gemeinde_forecast_25h AS
 SELECT
     g.ars,
     g.ags,
@@ -286,29 +291,29 @@ SELECT
     -- Area weight for the roll-ups; appended so CREATE OR REPLACE VIEW keeps
     -- working on an installed database.
     g.area_m2
-FROM analytical.de_current_run AS cur
-JOIN normalized.de_gemeinde_forecast AS f
+FROM analytical.current_run AS cur
+JOIN normalized.gemeinde_forecast AS f
   ON f.run_time_utc = cur.run_time_utc
  AND f.geography_version = cur.geography_version
-JOIN normalized.de_gemeinde AS g
+JOIN normalized.gemeinde AS g
   ON g.geography_version = f.geography_version AND g.ars = f.ars
-JOIN normalized.de_kreis AS k
+JOIN normalized.kreis AS k
   ON k.geography_version = g.geography_version AND k.kreis_key = g.kreis_key
-JOIN normalized.de_land AS l
+JOIN normalized.land AS l
   ON l.geography_version = g.geography_version AND l.land_key = g.land_key
-LEFT JOIN normalized.de_gemeinde_population AS p
+LEFT JOIN normalized.gemeinde_population AS p
   ON p.geography_version = g.geography_version AND p.ars = g.ars;
 
 -- Roll-up inputs: Gemeinde area weights (Gemeinden partition Kreise in
 -- VG250, so this equals direct area weighting) and total-population weights
 -- (NULL population contributes no weight; it is never treated as 0 residents).
-CREATE OR REPLACE VIEW normalized.de_current_rollup_input AS
+CREATE OR REPLACE VIEW normalized.current_rollup_input AS
 SELECT
     f.*,
     COALESCE(f.population_total, 0) AS population_weight
-FROM analytical.de_current_gemeinde_forecast_25h AS f;
+FROM analytical.current_gemeinde_forecast_25h AS f;
 
-CREATE OR REPLACE VIEW analytical.de_current_kreis_forecast_25h AS
+CREATE OR REPLACE VIEW analytical.current_kreis_forecast_25h AS
 SELECT
     i.kreis_key,
     MIN(i.kreis_name) AS kreis_name,
@@ -332,11 +337,11 @@ SELECT
     SUM(i.area_m2) AS area_m2,
     SUM(i.population_total) AS population_total,
     COUNT(*) AS gemeinde_count
-FROM normalized.de_current_rollup_input AS i
+FROM normalized.current_rollup_input AS i
 GROUP BY i.kreis_key, i.run_time_utc, i.lead_time, i.lead_hour,
          i.valid_time_utc, i.valid_time_berlin;
 
-CREATE OR REPLACE VIEW analytical.de_current_land_forecast_25h AS
+CREATE OR REPLACE VIEW analytical.current_land_forecast_25h AS
 SELECT
     i.land_key,
     MIN(i.land_name) AS land_name,
@@ -358,11 +363,11 @@ SELECT
     SUM(i.area_m2) AS area_m2,
     SUM(i.population_total) AS population_total,
     COUNT(*) AS gemeinde_count
-FROM normalized.de_current_rollup_input AS i
+FROM normalized.current_rollup_input AS i
 GROUP BY i.land_key, i.run_time_utc, i.lead_time, i.lead_hour,
          i.valid_time_utc, i.valid_time_berlin;
 
-CREATE OR REPLACE VIEW analytical.de_current_bund_forecast_25h AS
+CREATE OR REPLACE VIEW analytical.current_bund_forecast_25h AS
 SELECT
     i.run_time_utc,
     i.lead_time,
@@ -382,11 +387,11 @@ SELECT
     SUM(i.area_m2) AS area_m2,
     SUM(i.population_total) AS population_total,
     COUNT(*) AS gemeinde_count
-FROM normalized.de_current_rollup_input AS i
+FROM normalized.current_rollup_input AS i
 GROUP BY i.run_time_utc, i.lead_time, i.lead_hour,
          i.valid_time_utc, i.valid_time_berlin;
 
-CREATE OR REPLACE VIEW analytical.de_current_gemeinde_summary AS
+CREATE OR REPLACE VIEW analytical.current_gemeinde_summary AS
 WITH ranked AS (
     SELECT
         f.*,
@@ -406,7 +411,7 @@ WITH ranked AS (
             PARTITION BY f.ars
             ORDER BY f.apparent_temperature_shade_c ASC NULLS LAST, f.valid_time_utc
         ) AS apparent_min_rank
-    FROM analytical.de_current_gemeinde_forecast_25h AS f
+    FROM analytical.current_gemeinde_forecast_25h AS f
 )
 SELECT
     t.ars,
@@ -441,11 +446,11 @@ WHERE t.temperature_rank = 1;
 -- measure, the Berlin time and the lead hour of its first occurrence (same
 -- rule as the Gemeinde summary: highest or lowest value, earliest time on a
 -- tie; NULL when the measure is NULL in every lead hour). The rule is stated
--- once, in normalized.de_current_rollup_summary, over all three levels; the
+-- once, in normalized.current_rollup_summary, over all three levels; the
 -- analytical views select their level from it. Their min_ columns come last
 -- so CREATE OR REPLACE VIEW works on an installed database.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE VIEW normalized.de_current_rollup_summary AS
+CREATE OR REPLACE VIEW normalized.current_rollup_summary AS
 WITH levels AS (
     SELECT 'kreis' AS level, k.kreis_key AS region_key, k.kreis_name AS region_name,
            k.land_key, k.land_name, k.run_time_utc, k.lead_hour, k.valid_time_utc,
@@ -454,7 +459,7 @@ WITH levels AS (
            k.apparent_temperature_shade_area_weighted_c,
            k.apparent_temperature_shade_population_weighted_c,
            k.population_total, k.gemeinde_count
-    FROM analytical.de_current_kreis_forecast_25h AS k
+    FROM analytical.current_kreis_forecast_25h AS k
     UNION ALL
     SELECT 'land', l.land_key, l.land_name,
            l.land_key, l.land_name, l.run_time_utc, l.lead_hour, l.valid_time_utc,
@@ -463,7 +468,7 @@ WITH levels AS (
            l.apparent_temperature_shade_area_weighted_c,
            l.apparent_temperature_shade_population_weighted_c,
            l.population_total, l.gemeinde_count
-    FROM analytical.de_current_land_forecast_25h AS l
+    FROM analytical.current_land_forecast_25h AS l
     UNION ALL
     SELECT 'bund', NULL, NULL,
            NULL, NULL, b.run_time_utc, b.lead_hour, b.valid_time_utc,
@@ -472,7 +477,7 @@ WITH levels AS (
            b.apparent_temperature_shade_area_weighted_c,
            b.apparent_temperature_shade_population_weighted_c,
            b.population_total, b.gemeinde_count
-    FROM analytical.de_current_bund_forecast_25h AS b
+    FROM analytical.current_bund_forecast_25h AS b
 ),
 measures AS (
     SELECT lv.level, lv.region_key, lv.region_name, lv.land_key, lv.land_name,
@@ -552,7 +557,7 @@ SELECT
 FROM extremes AS e
 GROUP BY e.level, e.region_key;
 
-CREATE OR REPLACE VIEW analytical.de_current_kreis_summary AS
+CREATE OR REPLACE VIEW analytical.current_kreis_summary AS
 SELECT
     s.region_key AS kreis_key, s.region_name AS kreis_name, s.land_key, s.land_name,
     s.run_time_utc,
@@ -577,10 +582,10 @@ SELECT
     s.min_apparent_temperature_shade_population_weighted_c,
     s.min_apparent_temperature_shade_population_weighted_at_berlin,
     s.min_apparent_temperature_shade_population_weighted_lead_hour
-FROM normalized.de_current_rollup_summary AS s
+FROM normalized.current_rollup_summary AS s
 WHERE s.level = 'kreis';
 
-CREATE OR REPLACE VIEW analytical.de_current_land_summary AS
+CREATE OR REPLACE VIEW analytical.current_land_summary AS
 SELECT
     s.region_key AS land_key, s.region_name AS land_name,
     s.run_time_utc,
@@ -605,10 +610,10 @@ SELECT
     s.min_apparent_temperature_shade_population_weighted_c,
     s.min_apparent_temperature_shade_population_weighted_at_berlin,
     s.min_apparent_temperature_shade_population_weighted_lead_hour
-FROM normalized.de_current_rollup_summary AS s
+FROM normalized.current_rollup_summary AS s
 WHERE s.level = 'land';
 
-CREATE OR REPLACE VIEW analytical.de_current_bund_summary AS
+CREATE OR REPLACE VIEW analytical.current_bund_summary AS
 SELECT
     s.run_time_utc,
     s.max_temperature_area_weighted_c, s.max_temperature_area_weighted_at_berlin,
@@ -632,13 +637,13 @@ SELECT
     s.min_apparent_temperature_shade_population_weighted_c,
     s.min_apparent_temperature_shade_population_weighted_at_berlin,
     s.min_apparent_temperature_shade_population_weighted_lead_hour
-FROM normalized.de_current_rollup_summary AS s
+FROM normalized.current_rollup_summary AS s
 WHERE s.level = 'bund';
 
 -- ---------------------------------------------------------------------------
 -- Check 4: bridge coverage per Gemeinde (Σ intersection / Gemeinde area).
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.check_de_bridge_coverage(
+CREATE OR REPLACE FUNCTION normalized.check_bridge_coverage(
     p_geography_version text,
     p_source_grid_id text,
     p_min_coverage double precision DEFAULT 0.999
@@ -650,8 +655,8 @@ CREATE OR REPLACE FUNCTION normalized.check_de_bridge_coverage(
     LANGUAGE sql STABLE
     AS $$
     SELECT g.ars, g.gemeinde_name, COALESCE(SUM(b.fraction_of_gemeinde), 0)
-    FROM normalized.de_gemeinde AS g
-    LEFT JOIN normalized.de_icon_cell_gemeinde_bridge AS b
+    FROM normalized.gemeinde AS g
+    LEFT JOIN normalized.icon_cell_gemeinde_bridge AS b
       ON b.geography_version = g.geography_version
      AND b.ars = g.ars
      AND b.source_grid_id = p_source_grid_id
@@ -667,7 +672,7 @@ $$;
 -- run before it, and any newer run that is still loading. Database rows
 -- only; GRIB files are never deleted here.
 -- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION normalized.prune_de_forecast(
+CREATE OR REPLACE FUNCTION normalized.prune_forecast(
     p_geography_version text,
     p_keep_complete_runs integer DEFAULT 2
 ) RETURNS TABLE(
@@ -685,7 +690,7 @@ BEGIN
     SELECT MIN(kept.run_time_utc) INTO v_cutoff
     FROM (
         SELECT c.run_time_utc
-        FROM normalized.de_forecast_run_completeness AS c
+        FROM normalized.forecast_run_completeness AS c
         WHERE c.geography_version = p_geography_version AND c.is_complete
         ORDER BY c.run_time_utc DESC
         LIMIT p_keep_complete_runs
@@ -693,24 +698,24 @@ BEGIN
 
     -- Fewer complete runs than requested: keep everything.
     IF v_cutoff IS NULL OR (
-        SELECT COUNT(*) FROM normalized.de_forecast_run_completeness AS c
+        SELECT COUNT(*) FROM normalized.forecast_run_completeness AS c
         WHERE c.geography_version = p_geography_version AND c.is_complete
     ) < p_keep_complete_runs THEN
         RETURN QUERY SELECT v_cutoff, 0::bigint, 0::bigint;
         RETURN;
     END IF;
 
-    DELETE FROM normalized.de_icon_cell_value AS w
-    USING normalized.de_forecast_run AS r
+    DELETE FROM normalized.icon_cell_value AS w
+    USING normalized.forecast_run AS r
     WHERE r.run_time_utc = w.run_time_utc
       AND r.geography_version = p_geography_version
       AND w.run_time_utc < v_cutoff;
     GET DIAGNOSTICS v_cells = ROW_COUNT;
-    DELETE FROM normalized.de_forecast_run AS r
+    DELETE FROM normalized.forecast_run AS r
     WHERE r.geography_version = p_geography_version
       AND r.run_time_utc < v_cutoff;
 
-    DELETE FROM normalized.de_gemeinde_forecast AS f
+    DELETE FROM normalized.gemeinde_forecast AS f
     WHERE f.geography_version = p_geography_version
       AND f.run_time_utc < v_cutoff;
     GET DIAGNOSTICS v_gemeinden = ROW_COUNT;

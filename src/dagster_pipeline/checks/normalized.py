@@ -2,8 +2,8 @@ import dagster as dg
 
 from src.database.connection import database_connection
 from src.dagster_pipeline.assets.normalized import (
-    NORMALIZED_DE_HIERARCHY_KEY,
-    NORMALIZED_DE_POPULATION_KEY,
+    NORMALIZED_HIERARCHY_KEY,
+    NORMALIZED_POPULATION_KEY,
 )
 from src.ingestion.contract import GEOGRAPHY_VERSION
 from src.database.normalize import zensus_source_sha256s
@@ -20,12 +20,12 @@ MAX_LISTED = 50
 EXPECTED_BUND_MINUS_LAENDER = 8_258
 
 
-@dg.asset_check(asset=NORMALIZED_DE_POPULATION_KEY, name="de_key_coverage")
-def de_key_coverage() -> dg.AssetCheckResult:
+@dg.asset_check(asset=NORMALIZED_POPULATION_KEY, name="key_coverage")
+def key_coverage() -> dg.AssetCheckResult:
     """Check 1: every VG250 unit has a Zensus record and vice versa."""
     with database_connection(application_name="datlas_key_check") as connection:
         rows = connection.execute(
-            "SELECT * FROM normalized.check_de_key_coverage(%s, %s)",
+            "SELECT * FROM normalized.check_key_coverage(%s, %s)",
             (GEOGRAPHY_VERSION, zensus_source_sha256s()),
         ).fetchall()
 
@@ -55,12 +55,12 @@ def de_key_coverage() -> dg.AssetCheckResult:
     )
 
 
-@dg.asset_check(asset=NORMALIZED_DE_HIERARCHY_KEY, name="de_hierarchy_integrity")
-def de_hierarchy_integrity() -> dg.AssetCheckResult:
+@dg.asset_check(asset=NORMALIZED_HIERARCHY_KEY, name="hierarchy_integrity")
+def hierarchy_integrity() -> dg.AssetCheckResult:
     """Check 2: what foreign keys cannot guarantee."""
     with database_connection(application_name="datlas_hierarchy_check") as connection:
         violations = connection.execute(
-            "SELECT * FROM normalized.check_de_hierarchy(%s)",
+            "SELECT * FROM normalized.check_hierarchy(%s)",
             (GEOGRAPHY_VERSION,),
         ).fetchall()
         area = connection.execute(
@@ -68,7 +68,7 @@ def de_hierarchy_integrity() -> dg.AssetCheckResult:
             SELECT COUNT(*),
                    MAX(ABS(relative_difference)),
                    COUNT(*) FILTER (WHERE ABS(relative_difference) > %s)
-            FROM normalized.de_kreis_area_partition(%s)
+            FROM normalized.kreis_area_partition(%s)
             """,
             (AREA_PARTITION_TOLERANCE, GEOGRAPHY_VERSION),
         ).fetchone()
@@ -94,12 +94,12 @@ def de_hierarchy_integrity() -> dg.AssetCheckResult:
     )
 
 
-@dg.asset_check(asset=NORMALIZED_DE_POPULATION_KEY, name="de_source_totals")
-def de_source_totals() -> dg.AssetCheckResult:
+@dg.asset_check(asset=NORMALIZED_POPULATION_KEY, name="source_totals")
+def source_totals() -> dg.AssetCheckResult:
     """Check 3: Gemeinde population sums equal the published Zensus totals."""
     with database_connection(application_name="datlas_check3") as connection:
         rows = connection.execute(
-            "SELECT * FROM normalized.check_de_source_totals(%s, %s)",
+            "SELECT * FROM normalized.check_source_totals(%s, %s)",
             (GEOGRAPHY_VERSION, zensus_source_sha256s()),
         ).fetchall()
 
@@ -143,8 +143,8 @@ def de_source_totals() -> dg.AssetCheckResult:
     )
 
 
-GERMANY_NORMALIZED_CHECKS = [
-    de_key_coverage,
-    de_hierarchy_integrity,
-    de_source_totals,
+NORMALIZED_CHECKS = [
+    key_coverage,
+    hierarchy_integrity,
+    source_totals,
 ]

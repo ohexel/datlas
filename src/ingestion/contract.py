@@ -178,7 +178,7 @@ class BaGemeindedatenContract:
 
 
 # Indicator code, German source label, column number in the BA table.
-# Codes are theme-independent keys of normalized.de_indicator.
+# Codes are theme-independent keys of normalized.indicator.
 BA_INDICATORS: tuple[tuple[str, str, int], ...] = (
     ("employees_residence", "Sozialversicherungspflichtig Beschäftigte am Wohnort", 1),
     ("employees_residence_men", "darunter Männer (Wohnort)", 2),

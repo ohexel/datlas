@@ -259,7 +259,7 @@ def test_run_sectors_and_sensor_respect_an_active_cooldown(monkeypatch, tmp_path
     monkeypatch.setattr(run, "ensure_dagster_home", lambda root: None)
     monkeypatch.setattr(run, "execute_job", lambda *a, **k: pytest.fail("job must not start"))
     with pytest.raises(run.SectorRunRateLimited, match="Run the same command again after"):
-        run.run_germany_sectors(date(2026, 3, 31), project_root=tmp_path)
+        run.run_sectors(date(2026, 3, 31), project_root=tmp_path)
 
     monkeypatch.setattr(sensor, "cooldown_until", lambda: run.cooldown_until(tmp_path / "data/raw/germany/ba_rate_limit.json"))
     monkeypatch.setattr(sensor, "latest_loaded_file_date", lambda: pytest.fail("no lookup during a cool-down"))
@@ -268,7 +268,7 @@ def test_run_sectors_and_sensor_respect_an_active_cooldown(monkeypatch, tmp_path
 
 @pytest.mark.contract
 def test_sector_totals_accept_only_documented_gaps_and_unassigned_employees() -> None:
-    """Rules of check 14 (de_ba_sector_source_totals), on synthetic rows:
+    """Rules of check 14 (ba_sector_source_totals), on synthetic rows:
     a reviewed discrepancy in the BA's figures passes only at its documented
     size (Main-Kinzig-Kreis, ADR 020), Germany may exceed the Länder only by
     employees not assignable to a Land (Gemeindedaten row, ADR 020)."""
@@ -383,27 +383,27 @@ def test_sector_refresh_and_checks_on_a_fixture_land(tmp_path) -> None:
         with connection.transaction(force_rollback=True):
             apply_sector_schema(connection)
             connection.execute(
-                "INSERT INTO normalized.de_land VALUES (%s,'99','Fixland',%s,2e6,'f')", (FIXTURE, square)
+                "INSERT INTO normalized.land VALUES (%s,'99','Fixland',%s,2e6,'f')", (FIXTURE, square)
             )
             for kreis in reports:
                 connection.execute(
-                    "INSERT INTO normalized.de_kreis VALUES (%s,%s,'99',%s,'Kreis',NULL,%s,1e6,'f')",
+                    "INSERT INTO normalized.kreis VALUES (%s,%s,'99',%s,'Kreis',NULL,%s,1e6,'f')",
                     (FIXTURE, kreis, f"Kreis {kreis}", square),
                 )
-            copy_rows(connection, schema="raw", table="de_ba_regionalreport",
+            copy_rows(connection, schema="raw", table="ba_regionalreport",
                       columns=REGIONALREPORT_COLUMNS,
                       rows=(row for key, path in reports.items()
                             for row in regionalreport_rows(path, key, FILE_DATE)))
             from src.ingestion.contract import BA_WZ_HEFT_CONTRACT
             from dataclasses import replace
             fixture_contract = replace(BA_WZ_HEFT_CONTRACT, regions={"99": "99", "d": "DG"})
-            copy_rows(connection, schema="raw", table="de_ba_wz_heft", columns=WZ_COLUMNS,
+            copy_rows(connection, schema="raw", table="ba_wz_heft", columns=WZ_COLUMNS,
                       rows=(row for code, path in booklets.items()
                             for row in wz_rows(path, code, FILE_DATE, fixture_contract)))
             upsert_sector_catalogue(connection)
-            connection.execute("ANALYZE raw.de_ba_regionalreport")
+            connection.execute("ANALYZE raw.ba_regionalreport")
             connection.execute(
-                "SELECT * FROM normalized.refresh_de_ba_sectors(%s, %s)",
+                "SELECT * FROM normalized.refresh_ba_sectors(%s, %s)",
                 (FIXTURE, sector_row_indicators()),
             ).fetchall()
             values = {
@@ -411,17 +411,17 @@ def test_sector_refresh_and_checks_on_a_fixture_land(tmp_path) -> None:
                 for level, key, code, quarter, value, status in connection.execute(
                     """
                     SELECT level, region_key, indicator_code, reference_date, value, value_status
-                    FROM normalized.de_indicator_value
+                    FROM normalized.indicator_value
                     WHERE geography_version = %s AND reference_date BETWEEN '1998-01-01' AND '1999-12-31'
                     """,
                     (FIXTURE,),
                 )
             }
             identities = connection.execute(
-                "SELECT * FROM normalized.check_de_ba_sector_identities(%s)", (FILE_DATE,)
+                "SELECT * FROM normalized.check_ba_sector_identities(%s)", (FILE_DATE,)
             ).fetchall()
             totals = connection.execute(
-                "SELECT * FROM normalized.check_de_ba_sector_totals(%s, %s)", (FILE_DATE, FIXTURE)
+                "SELECT * FROM normalized.check_ba_sector_totals(%s, %s)", (FILE_DATE, FIXTURE)
             ).fetchall()
 
     quarter = date(1999, 3, 31)

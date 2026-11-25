@@ -50,19 +50,19 @@ def _rate_limit_message(file_date: date, project_root: Path, until) -> str:
     )
 
 
-def run_germany_sectors(file_date: date, project_root: Path = PROJECT_ROOT) -> dict[str, object]:
+def run_sectors(file_date: date, project_root: Path = PROJECT_ROOT) -> dict[str, object]:
     ensure_dagster_home(project_root)
     cooldown_path = project_root / "data/raw/germany/ba_rate_limit.json"
     until = cooldown_until(cooldown_path)
     if until is not None:
         raise SectorRunRateLimited(_rate_limit_message(file_date, project_root, until))
     started = perf_counter()
-    result = execute_job("germany_sectors", run_config=sector_run_config(file_date))
+    result = execute_job("sectors", run_config=sector_run_config(file_date))
     if not result.success:
         until = cooldown_until(cooldown_path)
         if until is not None:
             raise SectorRunRateLimited(_rate_limit_message(file_date, project_root, until))
-        raise RuntimeError(f"germany_sectors failed; inspect Dagster run {result.run_id}")
+        raise RuntimeError(f"sectors failed; inspect Dagster run {result.run_id}")
     return {
         "status": "ready",
         "file_date": file_date.isoformat(),
@@ -80,7 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     logging.basicConfig(format="%(asctime)s %(levelname)s %(name)s %(message)s", level=logging.INFO)
     try:
-        print(json.dumps(run_germany_sectors(args.file_date), indent=2))
+        print(json.dumps(run_sectors(args.file_date), indent=2))
     except SectorRunRateLimited as stop:
         print(json.dumps({"status": "rate_limited", "message": str(stop)}, indent=2, ensure_ascii=False))
         return 2

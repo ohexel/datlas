@@ -1,6 +1,6 @@
 """Checks of the BA Gemeindedaten against the source and the hierarchy.
 
-All checks evaluate the newest reference date in raw.de_ba_gemeindedaten,
+All checks evaluate the newest reference date in raw.ba_gemeindedaten,
 which is the one the assets have just loaded.
 """
 
@@ -12,8 +12,8 @@ from psycopg import Connection
 
 from src.database.connection import database_connection
 from src.dagster_pipeline.assets.employment import (
-    NORMALIZED_DE_INDICATOR_VALUE_KEY,
-    RAW_DE_BA_GEMEINDEDATEN_KEY,
+    NORMALIZED_INDICATOR_VALUE_KEY,
+    RAW_BA_GEMEINDEDATEN_KEY,
 )
 from src.ingestion.contract import BA_GEMEINDEDATEN_CONTRACT, GEOGRAPHY_VERSION
 from src.database.indicators import latest_loaded_reference_date
@@ -25,12 +25,12 @@ MAX_LISTED = 50
 def _reference_date(connection: Connection) -> date:
     reference_date = latest_loaded_reference_date(connection)
     if reference_date is None:
-        raise RuntimeError("raw.de_ba_gemeindedaten is empty")
+        raise RuntimeError("raw.ba_gemeindedaten is empty")
     return reference_date
 
 
-@dg.asset_check(asset=RAW_DE_BA_GEMEINDEDATEN_KEY, name="de_ba_source_contract")
-def de_ba_source_contract() -> dg.AssetCheckResult:
+@dg.asset_check(asset=RAW_BA_GEMEINDEDATEN_KEY, name="ba_source_contract")
+def ba_source_contract() -> dg.AssetCheckResult:
     """Row counts per sheet and level, value signs, and the pinned vintage."""
     with database_connection(application_name="datlas_ba_check") as connection:
         reference_date = _reference_date(connection)
@@ -39,7 +39,7 @@ def de_ba_source_contract() -> dg.AssetCheckResult:
             for sheet, level, count in connection.execute(
                 """
                 SELECT sheet_name, source_level, COUNT(*)
-                FROM raw.de_ba_gemeindedaten WHERE reference_date = %s
+                FROM raw.ba_gemeindedaten WHERE reference_date = %s
                 GROUP BY 1, 2
                 """,
                 (reference_date,),
@@ -51,8 +51,8 @@ def de_ba_source_contract() -> dg.AssetCheckResult:
                 array_agg(DISTINCT r.source_sha256),
                 COUNT(*) FILTER (WHERE l.source_value !~ '^([0-9]+|[*])$'),
                 COUNT(*) FILTER (WHERE l.source_value = '*' AND l.source_level <> 'gem')
-            FROM raw.de_ba_gemeindedaten AS r
-            JOIN normalized.de_ba_long(%s) AS l
+            FROM raw.ba_gemeindedaten AS r
+            JOIN normalized.ba_long(%s) AS l
               ON l.sheet_name = r.sheet_name AND l.source_key = r.source_key
             WHERE r.reference_date = %s
             """,
@@ -104,13 +104,13 @@ def de_ba_source_contract() -> dg.AssetCheckResult:
     )
 
 
-@dg.asset_check(asset=RAW_DE_BA_GEMEINDEDATEN_KEY, name="de_ba_column_identities")
-def de_ba_column_identities() -> dg.AssetCheckResult:
+@dg.asset_check(asset=RAW_BA_GEMEINDEDATEN_KEY, name="ba_column_identities")
+def ba_column_identities() -> dg.AssetCheckResult:
     """Identities between the columns of every row, at every level."""
     with database_connection(application_name="datlas_ba_check") as connection:
         reference_date = _reference_date(connection)
         rows = connection.execute(
-            "SELECT * FROM normalized.check_de_ba_identities(%s)", (reference_date,)
+            "SELECT * FROM normalized.check_ba_identities(%s)", (reference_date,)
         ).fetchall()
     return dg.AssetCheckResult(
         passed=not rows,
@@ -129,13 +129,13 @@ def de_ba_column_identities() -> dg.AssetCheckResult:
     )
 
 
-@dg.asset_check(asset=NORMALIZED_DE_INDICATOR_VALUE_KEY, name="de_ba_key_coverage")
-def de_ba_key_coverage() -> dg.AssetCheckResult:
+@dg.asset_check(asset=NORMALIZED_INDICATOR_VALUE_KEY, name="ba_key_coverage")
+def ba_key_coverage() -> dg.AssetCheckResult:
     """BA Gemeinde keys against the hierarchy; documented exceptions only."""
     with database_connection(application_name="datlas_ba_check") as connection:
         reference_date = _reference_date(connection)
         rows = connection.execute(
-            "SELECT * FROM normalized.check_de_ba_key_coverage(%s, %s)",
+            "SELECT * FROM normalized.check_ba_key_coverage(%s, %s)",
             (reference_date, GEOGRAPHY_VERSION),
         ).fetchall()
 
@@ -181,13 +181,13 @@ def de_ba_key_coverage() -> dg.AssetCheckResult:
     )
 
 
-@dg.asset_check(asset=NORMALIZED_DE_INDICATOR_VALUE_KEY, name="de_ba_source_totals")
-def de_ba_source_totals() -> dg.AssetCheckResult:
+@dg.asset_check(asset=NORMALIZED_INDICATOR_VALUE_KEY, name="ba_source_totals")
+def ba_source_totals() -> dg.AssetCheckResult:
     """Sums of additive indicators against the BA's published totals."""
     with database_connection(application_name="datlas_ba_check") as connection:
         reference_date = _reference_date(connection)
         rows = connection.execute(
-            "SELECT * FROM normalized.check_de_ba_source_totals(%s)", (reference_date,)
+            "SELECT * FROM normalized.check_ba_source_totals(%s)", (reference_date,)
         ).fetchall()
 
     failures: list[str] = []
@@ -235,9 +235,9 @@ def de_ba_source_totals() -> dg.AssetCheckResult:
     )
 
 
-GERMANY_EMPLOYMENT_CHECKS = [
-    de_ba_source_contract,
-    de_ba_column_identities,
-    de_ba_key_coverage,
-    de_ba_source_totals,
+EMPLOYMENT_CHECKS = [
+    ba_source_contract,
+    ba_column_identities,
+    ba_key_coverage,
+    ba_source_totals,
 ]

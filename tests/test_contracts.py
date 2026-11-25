@@ -21,7 +21,7 @@ def _page() -> tuple[str, str]:
 
 
 @pytest.mark.contract
-def test_no_germany_data_in_git() -> None:
+def test_no_source_data_in_git() -> None:
     gitignore = (PROJECT_ROOT / ".gitignore").read_text(encoding="utf-8")
     assert re.search(r"(?m)^data/$", gitignore)
     assert GERMANY_RAW_ROOT.parts[0] == "data"  # sources are downloaded under data/

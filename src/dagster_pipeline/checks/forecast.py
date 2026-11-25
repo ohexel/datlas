@@ -4,8 +4,8 @@ import dagster as dg
 
 from src.database.connection import database_connection
 from src.dagster_pipeline.assets.forecast import (
-    ANALYTICAL_DE_CURRENT_FORECAST_KEY,
-    NORMALIZED_DE_ICON_BRIDGE_KEY,
+    ANALYTICAL_CURRENT_FORECAST_KEY,
+    NORMALIZED_ICON_BRIDGE_KEY,
 )
 from src.ingestion.contract import GEOGRAPHY_VERSION
 from src.database.forecast import SOURCE_GRID_ID
@@ -19,19 +19,19 @@ APPARENT_TEMPERATURE_BOUNDS_C = (-70.0, 60.0)
 MAX_LISTED = 50
 
 
-@dg.asset_check(asset=NORMALIZED_DE_ICON_BRIDGE_KEY, name="de_bridge_coverage")
-def de_bridge_coverage() -> dg.AssetCheckResult:
+@dg.asset_check(asset=NORMALIZED_ICON_BRIDGE_KEY, name="bridge_coverage")
+def bridge_coverage() -> dg.AssetCheckResult:
     """Check 4: every Gemeinde is covered by ICON cells."""
     with database_connection(application_name="datlas_check4") as connection:
         exceptions = connection.execute(
-            "SELECT * FROM normalized.check_de_bridge_coverage(%s, %s, %s)",
+            "SELECT * FROM normalized.check_bridge_coverage(%s, %s, %s)",
             (GEOGRAPHY_VERSION, SOURCE_GRID_ID, MIN_BRIDGE_COVERAGE),
         ).fetchall()
         low, high, gemeinden = connection.execute(
             """
             SELECT MIN(s), MAX(s), COUNT(*) FROM (
                 SELECT SUM(fraction_of_gemeinde) AS s
-                FROM normalized.de_icon_cell_gemeinde_bridge
+                FROM normalized.icon_cell_gemeinde_bridge
                 WHERE geography_version = %s AND source_grid_id = %s
                 GROUP BY ars
             ) AS coverage
@@ -52,11 +52,11 @@ def de_bridge_coverage() -> dg.AssetCheckResult:
     )
 
 
-@dg.asset_check(asset=ANALYTICAL_DE_CURRENT_FORECAST_KEY, name="de_forecast_completeness")
-def de_forecast_completeness() -> dg.AssetCheckResult:
+@dg.asset_check(asset=ANALYTICAL_CURRENT_FORECAST_KEY, name="forecast_completeness")
+def forecast_completeness() -> dg.AssetCheckResult:
     """Check 5: the served run is the newest loaded run.
 
-    The served run is complete by definition (de_current_run), so the check
+    The served run is complete by definition (current_run), so the check
     looks for what that rule hides: a newer run that never completed, for
     example after a failed download or a refused partition. Warning only, as
     a newer run may still be loading."""
@@ -65,14 +65,14 @@ def de_forecast_completeness() -> dg.AssetCheckResult:
             """
             SELECT run_time_utc, lead_time_count, gemeinde_lead_row_count,
                    expected_row_count, is_complete
-            FROM normalized.de_forecast_run_completeness
+            FROM normalized.forecast_run_completeness
             WHERE geography_version = %s
             ORDER BY run_time_utc DESC
             """,
             (GEOGRAPHY_VERSION,),
         ).fetchall()
         current = connection.execute(
-            "SELECT run_time_utc FROM analytical.de_current_run"
+            "SELECT run_time_utc FROM analytical.current_run"
         ).fetchone()
     served = None if current is None else current[0]
     passed = served is not None and runs[0][0] == served
@@ -94,23 +94,23 @@ def de_forecast_completeness() -> dg.AssetCheckResult:
     )
 
 
-@dg.asset_check(asset=ANALYTICAL_DE_CURRENT_FORECAST_KEY, name="de_forecast_plausibility")
-def de_forecast_plausibility() -> dg.AssetCheckResult:
+@dg.asset_check(asset=ANALYTICAL_CURRENT_FORECAST_KEY, name="forecast_plausibility")
+def forecast_plausibility() -> dg.AssetCheckResult:
     """Check 6: physical bounds and no NULLs, for Gemeinden and cells."""
     t_low, t_high = TEMPERATURE_BOUNDS_C
     a_low, a_high = APPARENT_TEMPERATURE_BOUNDS_C
     with database_connection(application_name="datlas_check6") as connection:
         row = connection.execute(
             """
-            WITH cur AS (SELECT * FROM analytical.de_current_run),
+            WITH cur AS (SELECT * FROM analytical.current_run),
             g AS (
-                SELECT f.* FROM normalized.de_gemeinde_forecast AS f, cur
+                SELECT f.* FROM normalized.gemeinde_forecast AS f, cur
                 WHERE f.run_time_utc = cur.run_time_utc
                   AND f.geography_version = cur.geography_version
             ),
             c AS (
-                SELECT w.* FROM normalized.de_icon_cell_value AS w
-                JOIN normalized.de_forecast_run AS r USING (run_time_utc)
+                SELECT w.* FROM normalized.icon_cell_value AS w
+                JOIN normalized.forecast_run AS r USING (run_time_utc)
                 JOIN cur ON cur.run_time_utc = r.run_time_utc
                         AND cur.geography_version = r.geography_version
             )
@@ -151,8 +151,8 @@ def de_forecast_plausibility() -> dg.AssetCheckResult:
     )
 
 
-GERMANY_FORECAST_CHECKS = [
-    de_bridge_coverage,
-    de_forecast_completeness,
-    de_forecast_plausibility,
+FORECAST_CHECKS = [
+    bridge_coverage,
+    forecast_completeness,
+    forecast_plausibility,
 ]

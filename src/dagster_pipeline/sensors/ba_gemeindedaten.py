@@ -17,7 +17,7 @@ import psycopg
 import requests
 
 from src.database.connection import database_connection
-from src.dagster_pipeline.jobs import GERMANY_EMPLOYMENT_JOB, employment_run_config
+from src.dagster_pipeline.jobs import EMPLOYMENT_JOB, employment_run_config
 from src.ingestion.ba_gemeindedaten import next_reference_date, vintage_is_published
 from src.ingestion.contract import BA_GEMEINDEDATEN_CONTRACT
 from src.database.indicators import latest_loaded_reference_date
@@ -39,7 +39,7 @@ def ba_run_key(reference_date: date) -> str:
 
 
 @dg.sensor(
-    job=GERMANY_EMPLOYMENT_JOB,
+    job=EMPLOYMENT_JOB,
     minimum_interval_seconds=SENSOR_MINIMUM_INTERVAL_SECONDS,
     default_status=dg.DefaultSensorStatus.STOPPED,
     description=(

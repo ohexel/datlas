@@ -33,7 +33,7 @@ from src.ingestion.contract import (
 )
 
 
-LOGGER = logging.getLogger("germany_acquire")
+LOGGER = logging.getLogger(__name__)
 TIMEOUT_SECONDS = 300
 REDACTED_KEYS = frozenset({"Username", "username", "Parameter", "password"})
 
