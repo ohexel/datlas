@@ -1,7 +1,5 @@
-"""Protect the bounded, forecast-only operational retention contract."""
+"""GRIB file retention (split-plan D5) and the bounded rolling window."""
 
-from contextlib import contextmanager
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -14,12 +12,7 @@ from src.retention.forecast_policy import (
     forecast_retention_cutoff,
     forecast_retention_hours,
 )
-from src.retention.weather_raw import (
-    FORECAST_RETENTION_TABLES,
-    prune_forecast_data,
-    prune_forecast_database_rows,
-    prune_raw_weather_files,
-)
+from src.retention.grib_files import prune_grib_files
 
 
 NOW_UTC = datetime(2026, 8, 23, 10, 0, tzinfo=timezone.utc)
@@ -50,33 +43,6 @@ def _write_raw_partition(
     return grib_path, sidecar_path
 
 
-@dataclass
-class FakeCursor:
-    rowcount: int
-
-    def fetchone(self) -> tuple[int]:
-        return (self.rowcount,)
-
-
-class FakeConnection:
-    def __init__(self, rows_per_table: int = 3) -> None:
-        self.rows_per_table = rows_per_table
-        self.statements: list[tuple[str, tuple[datetime]]] = []
-
-    def execute(self, statement: str, parameters: tuple[datetime]) -> FakeCursor:
-        self.statements.append((statement, parameters))
-        return FakeCursor(rowcount=self.rows_per_table)
-
-
-def _connection_factory(connection: FakeConnection):
-    @contextmanager
-    def connect(*, application_name: str):
-        assert application_name == "datlas_forecast_retention"
-        yield connection
-
-    return connect
-
-
 def test_retention_apply_removes_expired_grib_sidecar_and_empty_directories(
     tmp_path: Path,
 ) -> None:
@@ -86,7 +52,8 @@ def test_retention_apply_removes_expired_grib_sidecar_and_empty_directories(
     indicator_dir = run_dir.parent
     forecast_root = indicator_dir.parent
 
-    result = prune_raw_weather_files(
+    result = prune_grib_files(
+        keep_run_times=(),
         paths=ProjectPaths(project_root=tmp_path),
         retention_hours=RETENTION_HOURS,
         now_utc=NOW_UTC,
@@ -96,7 +63,7 @@ def test_retention_apply_removes_expired_grib_sidecar_and_empty_directories(
     assert result.retention_hours == 24
     assert result.deleted_file_count == 1
     assert result.deleted_sidecar_file_count == 1
-    assert result.retained_recent_file_count == 0
+    assert result.kept_recent_file_count == 0
     assert not grib_path.exists()
     assert not sidecar_path.exists()
     assert not lead_dir.exists()
@@ -117,7 +84,8 @@ def test_retention_preserves_run_exactly_at_24_hour_boundary(
         run_label="20260822T1000",
     )
 
-    result = prune_raw_weather_files(
+    result = prune_grib_files(
+        keep_run_times=(),
         paths=ProjectPaths(project_root=tmp_path),
         retention_hours=24,
         now_utc=NOW_UTC,
@@ -125,7 +93,7 @@ def test_retention_preserves_run_exactly_at_24_hour_boundary(
     )
 
     assert result.deleted_file_count == 1
-    assert result.retained_recent_file_count == 1
+    assert result.kept_recent_file_count == 1
     assert not expired_grib.exists()
     assert boundary_grib.is_file()
     assert boundary_sidecar.is_file()
@@ -136,7 +104,8 @@ def test_retention_dry_run_reports_sources_without_deleting(
 ) -> None:
     grib_path, sidecar_path = _write_raw_partition(project_root=tmp_path)
 
-    result = prune_raw_weather_files(
+    result = prune_grib_files(
+        keep_run_times=(),
         paths=ProjectPaths(project_root=tmp_path),
         retention_hours=24,
         now_utc=NOW_UTC,
@@ -174,61 +143,39 @@ def test_partition_window_contains_at_most_24_whole_hour_runs() -> None:
     )
 
 
-def test_database_retention_dry_run_counts_forecast_tables_only() -> None:
-    connection = FakeConnection(rows_per_table=4)
-
-    result = prune_forecast_database_rows(
-        retention_hours=24,
-        now_utc=NOW_UTC,
-        dry_run=True,
-        connection_factory=_connection_factory(connection),
+def test_old_run_still_in_the_database_keeps_its_files(tmp_path: Path) -> None:
+    kept_grib, kept_sidecar = _write_raw_partition(
+        project_root=tmp_path, run_label="20260821T0900"
     )
+    gone_grib, _ = _write_raw_partition(project_root=tmp_path, run_label="20260821T0800")
 
-    assert result.total_affected_rows == 4 * len(FORECAST_RETENTION_TABLES)
-    assert list(result.affected_rows_by_table) == list(FORECAST_RETENTION_TABLES)
-    assert all(statement.startswith("SELECT COUNT(*)") for statement, _ in connection.statements)
-    assert all(
-        parameters == (datetime(2026, 8, 22, 10, 0, tzinfo=timezone.utc),)
-        for _, parameters in connection.statements
-    )
-    assert all("hostrada" not in table for table in FORECAST_RETENTION_TABLES)
-
-
-def test_database_retention_deletes_children_before_forecast_parents() -> None:
-    connection = FakeConnection(rows_per_table=2)
-
-    result = prune_forecast_database_rows(
-        retention_hours=24,
-        now_utc=NOW_UTC,
-        dry_run=False,
-        connection_factory=_connection_factory(connection),
-    )
-
-    assert result.total_affected_rows == 2 * len(FORECAST_RETENTION_TABLES)
-    assert all(statement.startswith("DELETE FROM") for statement, _ in connection.statements)
-    assert FORECAST_RETENTION_TABLES.index("analytical.plr_weather_population") < (
-        FORECAST_RETENTION_TABLES.index("analytical.plr_weather")
-    )
-    assert FORECAST_RETENTION_TABLES.index("raw.icon_d2_ruc_field") < (
-        FORECAST_RETENTION_TABLES.index("raw.icon_d2_ruc_source")
-    )
-
-
-def test_forecast_retention_uses_identical_database_and_file_cutoffs(
-    tmp_path: Path,
-) -> None:
-    _write_raw_partition(project_root=tmp_path)
-    connection = FakeConnection(rows_per_table=1)
-
-    result = prune_forecast_data(
+    result = prune_grib_files(
+        keep_run_times={datetime(2026, 8, 21, 9, 0, tzinfo=timezone.utc)},
         paths=ProjectPaths(project_root=tmp_path),
         retention_hours=24,
         now_utc=NOW_UTC,
-        dry_run=True,
-        connection_factory=_connection_factory(connection),
+        dry_run=False,
     )
 
-    assert result.cutoff_utc == result.database.cutoff_utc
-    assert result.cutoff_utc == result.raw_files.cutoff_utc
-    assert result.database.total_affected_rows == len(FORECAST_RETENTION_TABLES)
-    assert result.raw_files.deleted_file_count == 1
+    assert kept_grib.is_file()
+    assert kept_sidecar.is_file()
+    assert not gone_grib.exists()
+    assert result.database_run_count == 1
+    assert result.kept_database_run_file_count == 1
+    assert result.deleted_file_count == 1
+
+
+def test_database_run_times_from_other_zones_are_compared_in_utc(tmp_path: Path) -> None:
+    grib, _ = _write_raw_partition(project_root=tmp_path, run_label="20260821T0900")
+    berlin_summer = timezone(timedelta(hours=2))
+
+    result = prune_grib_files(
+        keep_run_times={datetime(2026, 8, 21, 11, 0, tzinfo=berlin_summer)},
+        paths=ProjectPaths(project_root=tmp_path),
+        retention_hours=24,
+        now_utc=NOW_UTC,
+        dry_run=False,
+    )
+
+    assert grib.is_file()
+    assert result.deleted_file_count == 0

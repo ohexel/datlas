@@ -15,6 +15,7 @@ from src.dagster_pipeline.partitions import (
     forecast_key_from_partition,
 )
 from src.ingestion.contract import GEOGRAPHY_VERSION
+from src.retention.grib_files import database_run_times, prune_grib_files
 from src.database.forecast import (
     SOURCE_GRID_ID,
     apply_forecast_schema,
@@ -27,7 +28,7 @@ NORMALIZED_GEMEINDE_FORECAST_KEY = dg.AssetKey(["normalized", "gemeinde_forecast
 ANALYTICAL_CURRENT_FORECAST_KEY = dg.AssetKey(["analytical", "current_forecast_25h"])
 
 # Open decision 3 (Ole, 2026-11-09): keep the newest complete run and the one
-# before it. Database rows only; GRIB files follow the existing file rule.
+# before it. GRIB files of these runs are kept too (src/retention/grib_files.py).
 KEEP_COMPLETE_RUNS = 2
 
 
@@ -92,7 +93,8 @@ def normalized_gemeinde_forecast(context: dg.AssetExecutionContext) -> None:
         "Publishes the current complete Germany forecast: the current_* "
         "views (Gemeinde, Kreis, Land, Bund; area- and population-weighted "
         "roll-ups; Gemeinde, Kreis, Land and Bund 24-hour summaries) and "
-        "applies retention (newest complete run plus the previous one)."
+        "applies retention (newest complete run plus the previous one; GRIB "
+        "files of runs older than 24 hours and no longer in the database)."
     ),
 )
 def analytical_current_forecast_25h(context: dg.AssetExecutionContext) -> None:
@@ -108,6 +110,7 @@ def analytical_current_forecast_25h(context: dg.AssetExecutionContext) -> None:
             "SELECT * FROM normalized.prune_forecast(%s, %s)",
             (GEOGRAPHY_VERSION, KEEP_COMPLETE_RUNS),
         ).fetchone()
+        database_runs = database_run_times(connection)
         counts = connection.execute(
             """
             SELECT
@@ -123,9 +126,15 @@ def analytical_current_forecast_25h(context: dg.AssetExecutionContext) -> None:
                 pg_total_relation_size('normalized.gemeinde_forecast')
             """
         ).fetchone()
+    # After the commit: only files of runs the database no longer holds go.
+    files = prune_grib_files(keep_run_times=database_runs, dry_run=False)
     context.add_output_metadata(
         {
             "current_run_time_utc": current[0].isoformat(),
+            "grib_files_deleted": files.deleted_file_count,
+            "grib_bytes_deleted": files.bytes_deleted,
+            "grib_files_kept_recent": files.kept_recent_file_count,
+            "grib_files_kept_for_database_runs": files.kept_database_run_file_count,
             "retention_oldest_kept_run_utc": None if kept is None else kept.isoformat(),
             "retention_deleted_cell_rows": int(deleted_cells),
             "retention_deleted_gemeinde_rows": int(deleted_gemeinden),
