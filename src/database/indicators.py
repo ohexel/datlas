@@ -90,7 +90,7 @@ def refresh_ba_indicators(
     reference_date: date,
     geography_version: str = GEOGRAPHY_VERSION,
 ) -> IndicatorRefreshSummary:
-    with database_connection(application_name="lwr_germany_indicators") as connection:
+    with database_connection(application_name="datlas_indicators") as connection:
         apply_indicator_schema(connection)
         upsert_ba_catalogue(connection)
         connection.execute("ANALYZE raw.de_ba_gemeindedaten")
@@ -229,7 +229,7 @@ def upsert_sector_quality_notes(connection: Connection) -> None:
 def refresh_sectors(geography_version: str = GEOGRAPHY_VERSION) -> IndicatorRefreshSummary:
     from src.ingestion.ba_sectors import apply_sector_schema
 
-    with database_connection(application_name="lwr_germany_sectors") as connection:
+    with database_connection(application_name="datlas_sectors") as connection:
         apply_sector_schema(connection)
         upsert_sector_catalogue(connection)
         for table in ("raw.de_ba_regionalreport", "raw.de_ba_wz_heft", "normalized.de_indicator",

@@ -72,7 +72,7 @@ def raw_de_ba_wz_heft(context: dg.AssetExecutionContext, config: SectorConfig) -
 )
 def raw_de_ba_regionalreport(context: dg.AssetExecutionContext, config: SectorConfig) -> None:
     file_date = date.fromisoformat(config.file_date)
-    with database_connection(application_name="lwr_germany_sector_keys") as connection:
+    with database_connection(application_name="datlas_sector_keys") as connection:
         keys = kreis_keys(connection, GEOGRAPHY_VERSION)
     with requests.Session() as session:
         client = PoliteClient(session, pause_seconds=config.pause_seconds)

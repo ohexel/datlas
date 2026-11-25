@@ -23,7 +23,7 @@ EXPECTED_BUND_MINUS_LAENDER = 8_258
 @dg.asset_check(asset=NORMALIZED_DE_POPULATION_KEY, name="de_key_coverage")
 def de_key_coverage() -> dg.AssetCheckResult:
     """Check 1: every VG250 unit has a Zensus record and vice versa."""
-    with database_connection(application_name="lwr_germany_key_check") as connection:
+    with database_connection(application_name="datlas_key_check") as connection:
         rows = connection.execute(
             "SELECT * FROM normalized.check_de_key_coverage(%s, %s)",
             (GEOGRAPHY_VERSION, zensus_source_sha256s()),
@@ -58,7 +58,7 @@ def de_key_coverage() -> dg.AssetCheckResult:
 @dg.asset_check(asset=NORMALIZED_DE_HIERARCHY_KEY, name="de_hierarchy_integrity")
 def de_hierarchy_integrity() -> dg.AssetCheckResult:
     """Check 2: what foreign keys cannot guarantee."""
-    with database_connection(application_name="lwr_germany_hierarchy_check") as connection:
+    with database_connection(application_name="datlas_hierarchy_check") as connection:
         violations = connection.execute(
             "SELECT * FROM normalized.check_de_hierarchy(%s)",
             (GEOGRAPHY_VERSION,),
@@ -97,7 +97,7 @@ def de_hierarchy_integrity() -> dg.AssetCheckResult:
 @dg.asset_check(asset=NORMALIZED_DE_POPULATION_KEY, name="de_source_totals")
 def de_source_totals() -> dg.AssetCheckResult:
     """Check 3: Gemeinde population sums equal the published Zensus totals."""
-    with database_connection(application_name="lwr_germany_check3") as connection:
+    with database_connection(application_name="datlas_check3") as connection:
         rows = connection.execute(
             "SELECT * FROM normalized.check_de_source_totals(%s, %s)",
             (GEOGRAPHY_VERSION, zensus_source_sha256s()),

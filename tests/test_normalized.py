@@ -73,7 +73,7 @@ def test_refresh_and_checks_classify_every_case() -> None:
         _zensus("GEOGM4", "990010000099", "7", "Phantom"),
     ]
 
-    with database_connection(application_name="lwr_germany_m2_test") as connection:
+    with database_connection(application_name="datlas_m2_test") as connection:
         with connection.transaction(force_rollback=True):
             apply_normalized_schema(connection)
             copy_rows(
@@ -200,7 +200,7 @@ def test_static_hierarchy_is_safe_to_repeat() -> None:
             (version,),
         ).fetchall()
 
-    with database_connection(application_name="lwr_germany_repeat_test") as connection:
+    with database_connection(application_name="datlas_repeat_test") as connection:
         with connection.transaction(force_rollback=True):
             apply_forecast_schema(connection)
             copy_rows(connection, schema="raw", table="de_vg250", columns=VG250_COLUMNS,

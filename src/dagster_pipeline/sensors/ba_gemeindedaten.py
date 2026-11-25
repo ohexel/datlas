@@ -51,7 +51,7 @@ def ba_gemeindedaten_release_sensor(
     context: dg.SensorEvaluationContext,
 ) -> dg.RunRequest | dg.SkipReason:
     try:
-        with database_connection(application_name="lwr_germany_ba_sensor") as connection:
+        with database_connection(application_name="datlas_ba_sensor") as connection:
             loaded = latest_loaded_reference_date(connection)
     except psycopg.errors.UndefinedTable:
         loaded = None

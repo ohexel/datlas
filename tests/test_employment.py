@@ -224,7 +224,7 @@ def test_refresh_serves_published_values_with_explicit_status(tmp_path) -> None:
     x, y = 4_500_000.0, 3_200_000.0
     square = f"SRID=3035;MULTIPOLYGON((({x} {y},{x + 1000} {y},{x + 1000} {y + 1000},{x} {y + 1000},{x} {y})))"
 
-    with database_connection(application_name="lwr_germany_ba_test") as connection:
+    with database_connection(application_name="datlas_ba_test") as connection:
         with connection.transaction(force_rollback=True):
             apply_indicator_schema(connection)
             upsert_ba_catalogue(connection)

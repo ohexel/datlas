@@ -379,7 +379,7 @@ def load_ba_gemeindedaten_raw(
         raise RuntimeError(f"{path} has SHA-256 {sha256}, contract expects {known.sha256}")
     content = read_workbook(path, reference_date, contract)
 
-    with database_connection(application_name="lwr_germany_ba_load") as connection:
+    with database_connection(application_name="datlas_ba_load") as connection:
         apply_indicator_schema(connection)
         connection.execute(
             "DELETE FROM raw.de_ba_gemeindedaten WHERE reference_date = %s",

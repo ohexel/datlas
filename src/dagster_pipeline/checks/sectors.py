@@ -39,7 +39,7 @@ def de_ba_sector_source_contract() -> dg.AssetCheckResult:
     """One complete file per Kreis and per Land; consistent Land rows."""
     contract = BA_REGIONALREPORT_CONTRACT
     rows_per_file = len(contract.sector_rows) * contract.quarters_per_file
-    with database_connection(application_name="lwr_germany_sector_check") as connection:
+    with database_connection(application_name="datlas_sector_check") as connection:
         file_date = _file_date(connection)
         kreise, complete, land_variants = connection.execute(
             """
@@ -105,7 +105,7 @@ def de_ba_sector_source_contract() -> dg.AssetCheckResult:
 @dg.asset_check(asset=RAW_DE_BA_REGIONALREPORT_KEY, name="de_ba_sector_identities")
 def de_ba_sector_identities() -> dg.AssetCheckResult:
     """Sections, groups and sector rows of table 2.3 add up."""
-    with database_connection(application_name="lwr_germany_sector_check") as connection:
+    with database_connection(application_name="datlas_sector_check") as connection:
         file_date = _file_date(connection)
         rows = connection.execute(
             "SELECT * FROM normalized.check_de_ba_sector_identities(%s)", (file_date,)
@@ -198,7 +198,7 @@ def evaluate_sector_totals(
 @dg.asset_check(asset=NORMALIZED_DE_SECTOR_VALUES_KEY, name="de_ba_sector_source_totals")
 def de_ba_sector_source_totals() -> dg.AssetCheckResult:
     """Totals across Kreise, Länder, the two products and the Gemeindedaten."""
-    with database_connection(application_name="lwr_germany_sector_check") as connection:
+    with database_connection(application_name="datlas_sector_check") as connection:
         file_date = _file_date(connection)
         rows = connection.execute(
             "SELECT * FROM normalized.check_de_ba_sector_totals(%s, %s)",
@@ -236,7 +236,7 @@ def de_ba_sector_source_totals() -> dg.AssetCheckResult:
 @dg.asset_check(asset=NORMALIZED_DE_SECTOR_VALUES_KEY, name="de_ba_sector_key_coverage")
 def de_ba_sector_key_coverage() -> dg.AssetCheckResult:
     """Every Kreis, Land and Germany has values for the newest quarter."""
-    with database_connection(application_name="lwr_germany_sector_check") as connection:
+    with database_connection(application_name="datlas_sector_check") as connection:
         rows = connection.execute(
             """
             SELECT level, region_key, region_name, employees_total_status

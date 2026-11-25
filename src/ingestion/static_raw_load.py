@@ -172,7 +172,7 @@ def load_vg250_raw(
     )
     results: list[RawLoadResult] = []
 
-    with database_connection(application_name="lwr_germany_vg250_load") as connection:
+    with database_connection(application_name="datlas_vg250_load") as connection:
         apply_germany_schema(connection)
         connection.execute(
             "DELETE FROM raw.de_vg250 WHERE source_sha256 = %s",
@@ -288,7 +288,7 @@ def load_zensus_raw(
     project_root: Path = Path("."),
     contract: ZensusContract = ZENSUS_CONTRACT,
 ) -> list[RawLoadResult]:
-    with database_connection(application_name="lwr_germany_zensus_load") as connection:
+    with database_connection(application_name="datlas_zensus_load") as connection:
         apply_germany_schema(connection)
         return [
             load_zensus_extract(connection, extract, project_root, contract)

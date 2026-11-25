@@ -32,7 +32,7 @@ def _reference_date(connection: Connection) -> date:
 @dg.asset_check(asset=RAW_DE_BA_GEMEINDEDATEN_KEY, name="de_ba_source_contract")
 def de_ba_source_contract() -> dg.AssetCheckResult:
     """Row counts per sheet and level, value signs, and the pinned vintage."""
-    with database_connection(application_name="lwr_germany_ba_check") as connection:
+    with database_connection(application_name="datlas_ba_check") as connection:
         reference_date = _reference_date(connection)
         counts = {
             f"{sheet}:{level}": int(count)
@@ -107,7 +107,7 @@ def de_ba_source_contract() -> dg.AssetCheckResult:
 @dg.asset_check(asset=RAW_DE_BA_GEMEINDEDATEN_KEY, name="de_ba_column_identities")
 def de_ba_column_identities() -> dg.AssetCheckResult:
     """Identities between the columns of every row, at every level."""
-    with database_connection(application_name="lwr_germany_ba_check") as connection:
+    with database_connection(application_name="datlas_ba_check") as connection:
         reference_date = _reference_date(connection)
         rows = connection.execute(
             "SELECT * FROM normalized.check_de_ba_identities(%s)", (reference_date,)
@@ -132,7 +132,7 @@ def de_ba_column_identities() -> dg.AssetCheckResult:
 @dg.asset_check(asset=NORMALIZED_DE_INDICATOR_VALUE_KEY, name="de_ba_key_coverage")
 def de_ba_key_coverage() -> dg.AssetCheckResult:
     """BA Gemeinde keys against the hierarchy; documented exceptions only."""
-    with database_connection(application_name="lwr_germany_ba_check") as connection:
+    with database_connection(application_name="datlas_ba_check") as connection:
         reference_date = _reference_date(connection)
         rows = connection.execute(
             "SELECT * FROM normalized.check_de_ba_key_coverage(%s, %s)",
@@ -184,7 +184,7 @@ def de_ba_key_coverage() -> dg.AssetCheckResult:
 @dg.asset_check(asset=NORMALIZED_DE_INDICATOR_VALUE_KEY, name="de_ba_source_totals")
 def de_ba_source_totals() -> dg.AssetCheckResult:
     """Sums of additive indicators against the BA's published totals."""
-    with database_connection(application_name="lwr_germany_ba_check") as connection:
+    with database_connection(application_name="datlas_ba_check") as connection:
         reference_date = _reference_date(connection)
         rows = connection.execute(
             "SELECT * FROM normalized.check_de_ba_source_totals(%s)", (reference_date,)

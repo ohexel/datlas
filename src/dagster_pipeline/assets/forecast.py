@@ -43,7 +43,7 @@ KEEP_COMPLETE_RUNS = 2
     ),
 )
 def normalized_de_icon_gemeinde_bridge(context: dg.AssetExecutionContext) -> None:
-    with database_connection(application_name="lwr_germany_bridge") as connection:
+    with database_connection(application_name="datlas_bridge") as connection:
         apply_forecast_schema(connection)
         connection.commit()  # release the view locks before the rebuild
         cells, rows, gemeinden = connection.execute(
@@ -98,7 +98,7 @@ def normalized_de_gemeinde_forecast(context: dg.AssetExecutionContext) -> None:
     ),
 )
 def analytical_de_current_forecast_25h(context: dg.AssetExecutionContext) -> None:
-    with database_connection(application_name="lwr_germany_publish") as connection:
+    with database_connection(application_name="datlas_publish") as connection:
         apply_forecast_schema(connection)
         connection.commit()  # release the view locks before retention
         current = connection.execute(

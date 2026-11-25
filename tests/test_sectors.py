@@ -379,7 +379,7 @@ def test_sector_refresh_and_checks_on_a_fixture_land(tmp_path) -> None:
                 "d": build_wz_heft(tmp_path / "d.xlsx", "Deutschland")}
     square = "SRID=3035;MULTIPOLYGON(((4500000 3200000,4501000 3200000,4501000 3201000,4500000 3201000,4500000 3200000)))"
 
-    with database_connection(application_name="lwr_germany_sector_test") as connection:
+    with database_connection(application_name="datlas_sector_test") as connection:
         with connection.transaction(force_rollback=True):
             apply_sector_schema(connection)
             connection.execute(

@@ -22,12 +22,12 @@ ROLLUP_TOLERANCE_C = 1e-9
 
 
 def _one(sql: str, params: tuple | dict = ()) -> tuple:
-    with database_connection(application_name="lwr_germany_acceptance") as connection:
+    with database_connection(application_name="datlas_acceptance") as connection:
         return connection.execute(sql, params).fetchone()
 
 
 def _all(sql: str, params: tuple | dict = ()) -> list[tuple]:
-    with database_connection(application_name="lwr_germany_acceptance") as connection:
+    with database_connection(application_name="datlas_acceptance") as connection:
         return connection.execute(sql, params).fetchall()
 
 
@@ -146,7 +146,7 @@ def test_rollups_are_consistent_across_levels() -> None:
 def test_map_values_export_is_complete_for_the_current_run() -> None:
     from src.export_germany_dashboard import collect_values
 
-    with database_connection(application_name="lwr_germany_acceptance") as connection:
+    with database_connection(application_name="datlas_acceptance") as connection:
         values = collect_values(connection)  # raises on any gap
         current = connection.execute(
             "SELECT run_time_utc FROM analytical.de_current_run"
@@ -215,7 +215,7 @@ def test_employment_view_covers_every_region_with_an_explicit_status() -> None:
 def test_employment_export_is_complete() -> None:
     from src.export_germany_dashboard import collect_employment
 
-    with database_connection(application_name="lwr_germany_acceptance") as connection:
+    with database_connection(application_name="datlas_acceptance") as connection:
         employment = collect_employment(connection)
     assert employment is not None
     assert (len(employment["lan"]), len(employment["krs"]), len(employment["gem"])) == (
@@ -296,7 +296,7 @@ def test_regionalreport_counts_employees_at_place_of_work() -> None:
 def test_sector_export_is_complete() -> None:
     from src.export_germany_dashboard import collect_sectors
 
-    with database_connection(application_name="lwr_germany_acceptance") as connection:
+    with database_connection(application_name="datlas_acceptance") as connection:
         sectors = collect_sectors(connection)
     assert sectors is not None
     assert (len(sectors["lan"]), len(sectors["krs"])) == (LAENDER, KREISE)

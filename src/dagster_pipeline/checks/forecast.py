@@ -22,7 +22,7 @@ MAX_LISTED = 50
 @dg.asset_check(asset=NORMALIZED_DE_ICON_BRIDGE_KEY, name="de_bridge_coverage")
 def de_bridge_coverage() -> dg.AssetCheckResult:
     """Check 4: every Gemeinde is covered by ICON cells."""
-    with database_connection(application_name="lwr_germany_check4") as connection:
+    with database_connection(application_name="datlas_check4") as connection:
         exceptions = connection.execute(
             "SELECT * FROM normalized.check_de_bridge_coverage(%s, %s, %s)",
             (GEOGRAPHY_VERSION, SOURCE_GRID_ID, MIN_BRIDGE_COVERAGE),
@@ -60,7 +60,7 @@ def de_forecast_completeness() -> dg.AssetCheckResult:
     looks for what that rule hides: a newer run that never completed, for
     example after a failed download or a refused partition. Warning only, as
     a newer run may still be loading."""
-    with database_connection(application_name="lwr_germany_check5") as connection:
+    with database_connection(application_name="datlas_check5") as connection:
         runs = connection.execute(
             """
             SELECT run_time_utc, lead_time_count, gemeinde_lead_row_count,
@@ -99,7 +99,7 @@ def de_forecast_plausibility() -> dg.AssetCheckResult:
     """Check 6: physical bounds and no NULLs, for Gemeinden and cells."""
     t_low, t_high = TEMPERATURE_BOUNDS_C
     a_low, a_high = APPARENT_TEMPERATURE_BOUNDS_C
-    with database_connection(application_name="lwr_germany_check6") as connection:
+    with database_connection(application_name="datlas_check6") as connection:
         row = connection.execute(
             """
             WITH cur AS (SELECT * FROM analytical.de_current_run),

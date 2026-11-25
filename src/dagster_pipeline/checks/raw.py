@@ -11,7 +11,7 @@ from src.ingestion.contract import VG250_CONTRACT, ZENSUS_CONTRACT
 @dg.asset_check(asset=RAW_DE_VG250_KEY, name="de_vg250_source_contract")
 def de_vg250_source_contract() -> dg.AssetCheckResult:
     """Per level: delivered and GF = 4 feature counts, unique ARS, validity."""
-    with database_connection(application_name="lwr_germany_vg250_check") as connection:
+    with database_connection(application_name="datlas_vg250_check") as connection:
         rows = connection.execute(
             """
             SELECT
@@ -79,7 +79,7 @@ def de_zensus2022_population_source_contract() -> dg.AssetCheckResult:
     expected_hashes = {
         extract.csv_sha256: extract for extract in ZENSUS_CONTRACT.extracts
     }
-    with database_connection(application_name="lwr_germany_zensus_check") as connection:
+    with database_connection(application_name="datlas_zensus_check") as connection:
         rows = connection.execute(
             """
             SELECT

@@ -140,7 +140,7 @@ def parse_forecast_request(
 
 
 def partition_complete(forecast) -> bool:
-    with database_connection(application_name="lwr_germany_run_state") as connection:
+    with database_connection(application_name="datlas_run_state") as connection:
         row = connection.execute(
             """
             SELECT

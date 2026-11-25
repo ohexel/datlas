@@ -41,7 +41,7 @@ def test_partition_aggregation_and_retention_keeps_two_runs() -> None:
     }
     base = datetime(2099, 1, 1, tzinfo=timezone.utc)
 
-    with database_connection(application_name="lwr_germany_m3_test") as connection:
+    with database_connection(application_name="datlas_m3_test") as connection:
         with connection.transaction(force_rollback=True):
             apply_forecast_schema(connection)
             connection.execute(
@@ -173,7 +173,7 @@ def test_summaries_take_the_earliest_hour_on_a_tie() -> None:
     def berlin(hour: int) -> datetime:
         return (run + timedelta(hours=hour)).astimezone(ZoneInfo("Europe/Berlin")).replace(tzinfo=None)
 
-    with database_connection(application_name="lwr_germany_tie_test") as connection:
+    with database_connection(application_name="datlas_tie_test") as connection:
         with connection.transaction(force_rollback=True):
             apply_forecast_schema(connection)
             connection.execute(

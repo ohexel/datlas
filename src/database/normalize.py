@@ -46,7 +46,7 @@ class PopulationSummary:
 def refresh_hierarchy(
     geography_version: str = GEOGRAPHY_VERSION,
 ) -> HierarchySummary:
-    with database_connection(application_name="lwr_germany_hierarchy") as connection:
+    with database_connection(application_name="datlas_hierarchy") as connection:
         apply_normalized_schema(connection)
         row = connection.execute(
             "SELECT * FROM normalized.refresh_de_hierarchy(%s, %s)",
@@ -60,7 +60,7 @@ def refresh_hierarchy(
 def refresh_population(
     geography_version: str = GEOGRAPHY_VERSION,
 ) -> PopulationSummary:
-    with database_connection(application_name="lwr_germany_population") as connection:
+    with database_connection(application_name="datlas_population") as connection:
         apply_normalized_schema(connection)
         row = connection.execute(
             "SELECT * FROM normalized.refresh_de_population(%s, %s, %s)",

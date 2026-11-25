@@ -106,7 +106,7 @@ def process_partition(
     )
     timings = result.timings
 
-    with database_connection(application_name="lwr_germany_forecast") as connection:
+    with database_connection(application_name="datlas_forecast") as connection:
         apply_forecast_schema(connection)
         # Commit the DDL at once: CREATE OR REPLACE VIEW locks the served views,
         # and the data transaction below runs for several seconds.

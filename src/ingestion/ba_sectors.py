@@ -603,7 +603,7 @@ def load_regionalreport_raw(
     project_root: Path = Path("."),
 ) -> RawLoadResult:
     """Load the Kreis files of one quarter into raw (replacing that quarter)."""
-    with database_connection(application_name="lwr_germany_sector_load") as connection:
+    with database_connection(application_name="datlas_sector_load") as connection:
         apply_sector_schema(connection)
         keys = kreis_keys(connection, geography_version)
         connection.execute("DELETE FROM raw.de_ba_regionalreport WHERE file_date = %s", (file_date,))
@@ -625,7 +625,7 @@ def load_regionalreport_raw(
 
 def load_wz_heft_raw(file_date: date, project_root: Path = Path(".")) -> RawLoadResult:
     """Load the 17 WZ booklets of one quarter into raw (replacing that quarter)."""
-    with database_connection(application_name="lwr_germany_sector_load") as connection:
+    with database_connection(application_name="datlas_sector_load") as connection:
         apply_sector_schema(connection)
         connection.execute("DELETE FROM raw.de_ba_wz_heft WHERE file_date = %s", (file_date,))
         loaded = copy_rows(
@@ -650,7 +650,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--wz-only", action="store_true", help="Download the WZ booklets only.")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    with database_connection(application_name="lwr_germany_sector_keys") as connection:
+    with database_connection(application_name="datlas_sector_keys") as connection:
         keys = kreis_keys(connection, GEOGRAPHY_VERSION)
     started = time.monotonic()
     with requests.Session() as session:

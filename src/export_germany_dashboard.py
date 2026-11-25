@@ -500,7 +500,7 @@ def build_tiles(connection: psycopg.Connection, destination: Path,
             "(Debian/Ubuntu: apt install tippecanoe; macOS: brew install tippecanoe)"
         )
     destination.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="lwr-germany-tiles-") as work:
+    with tempfile.TemporaryDirectory(prefix="datlas-tiles-") as work:
         layers = write_geometry_layers(connection, Path(work), geography_version)
         output = Path(work) / destination.name
         command = [
@@ -562,7 +562,7 @@ def export_germany_dashboard(
     data_dir = destination / "data"
     result: dict[str, object] = {"status": "ready", "output_directory": str(destination)}
 
-    with database_connection(application_name="lwr_germany_dashboard_export") as connection:
+    with database_connection(application_name="datlas_dashboard_export") as connection:
         values = collect_values(connection)
         employment = collect_employment(connection)
         sectors = collect_sectors(connection)

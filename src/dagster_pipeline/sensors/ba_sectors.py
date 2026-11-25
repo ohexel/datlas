@@ -30,7 +30,7 @@ SENSOR_MINIMUM_INTERVAL_SECONDS = 24 * 60 * 60
 
 def latest_loaded_file_date() -> date | None:
     try:
-        with database_connection(application_name="lwr_germany_sector_sensor") as connection:
+        with database_connection(application_name="datlas_sector_sensor") as connection:
             return connection.execute(
                 "SELECT MAX(file_date) FROM raw.de_ba_regionalreport"
             ).fetchone()[0]
