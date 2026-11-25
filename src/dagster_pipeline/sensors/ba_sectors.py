@@ -5,7 +5,7 @@ The BA publishes both products about six months after the quarter's end
 Once a day the sensor sends two HEAD requests for the quarter after the
 newest one loaded (the Regionalreport of one Kreis and the Germany WZ
 booklet), unless a rate-limit cool-down is active; when both exist it
-requests the germany_sectors job, which then downloads the other files one
+requests the sectors job, which then downloads the other files one
 at a time. Off by default: it polls an external host.
 """
 
@@ -54,7 +54,7 @@ def quarter_is_published(client: PoliteClient, file_date: date) -> bool:
     default_status=dg.DefaultSensorStatus.STOPPED,
     description=(
         "Daily HEAD requests for the next quarter of the BA sector data; "
-        "requests germany_sectors once it is published."
+        "requests sectors once it is published."
     ),
 )
 def ba_sectors_release_sensor(context: dg.SensorEvaluationContext) -> dg.RunRequest | dg.SkipReason:

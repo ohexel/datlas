@@ -19,7 +19,6 @@ CONTRACT_TEST_FILES = {
     "test_forecast_key.py",
     "test_icon_grid_contract.py",
     "test_run_forecast.py",
-    "test_weather_early_filtering.py",
     "test_weather_source_contract.py",
     "test_weather_raw_retention.py",
 }

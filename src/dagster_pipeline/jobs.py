@@ -1,4 +1,4 @@
-"""Germany-layer jobs. The Berlin jobs and sensor are unchanged (F)."""
+"""Jobs, one or two per asset group (src/dagster_pipeline/groups.py)."""
 
 from datetime import date
 
@@ -47,9 +47,8 @@ FORECAST_JOB = dg.define_asset_job(
         normalized_gemeinde_forecast,
     ),
     description=(
-        "One forecast partition for Germany: the four retained raw DWD "
-        "fields (file-only, shared with Berlin) and the Germany cell and "
-        "Gemeinde aggregation."
+        "One forecast partition: the four raw DWD fields (GRIB files) and "
+        "the cell and Gemeinde aggregation."
     ),
 )
 
@@ -68,7 +67,7 @@ EMPLOYMENT_JOB = dg.define_asset_job(
     description=(
         "Acquire one vintage of the BA Gemeindedaten (run config: reference "
         "date), load it raw and refresh the indicator values on the hierarchy, "
-        "with the BA source checks. Needs germany_static first."
+        "with the BA source checks. Needs static first."
     ),
 )
 
@@ -92,7 +91,7 @@ SECTORS_JOB = dg.define_asset_job(
         "the 17 WZ booklets for that quarter and a year earlier, and one "
         "Regionalreport per Kreis, one request at a time; load them raw and "
         "refresh the sector values, with the sector checks. Needs "
-        "germany_static first."
+        "static first."
     ),
 )
 

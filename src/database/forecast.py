@@ -1,8 +1,8 @@
-"""Germany forecast aggregation for one (run_time, lead_time) partition.
+"""Forecast aggregation for one (run_time, lead_time) partition.
 
-The four raw indicators of all Germany cells are staged in a temporary table.
-PostgreSQL converts units, computes shade apparent temperature with Berlin's
-function normalized.calculate_apparent_temperature_shade_c, stores the cell
+The four raw indicators of all bridge cells are staged in a temporary table.
+PostgreSQL converts units, computes shade apparent temperature with
+normalized.calculate_apparent_temperature_shade_c, stores the cell
 values and area-weights them to Gemeinden
 (normalized.refresh_forecast_partition). Why SQL and not numpy: ADR 018.
 """
@@ -20,7 +20,7 @@ from src.forecast_key import ForecastKey, ProjectPaths
 from src.ingestion.contract import GEOGRAPHY_VERSION
 from src.database.normalize import apply_normalized_schema
 from src.icon_grid_contract import ICON_D2_GRID_CONTRACT
-from src.ingestion.icon_d2_ruc_field import _prepare_field
+from src.ingestion.icon_d2_ruc_field import prepare_field
 
 
 FORECAST_SCHEMA_PATH = (
@@ -84,7 +84,7 @@ def _decode_fields(
 ) -> dict[str, np.ndarray]:
     values: dict[str, np.ndarray] = {}
     for indicator in INDICATOR_COLUMNS:
-        prepared = _prepare_field(paths=paths, forecast=forecast, indicator=indicator)
+        prepared = prepare_field(paths=paths, forecast=forecast, indicator=indicator)
         values[indicator] = prepared.values[cell_indices]
         del prepared
     return values

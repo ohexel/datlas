@@ -4,10 +4,10 @@ Usage:
     uv run --env-file .env python -m src.run_forecast \\
         --run-time "$(date -u -d '3 hours ago' +%Y%m%dT%H00)"
 
-Each lead time is one Dagster partition of the `germany_forecast` job
+Each lead time is one Dagster partition of the `forecast` job
 (the four raw DWD fields plus the aggregation to Gemeinden). Partitions
 already complete for every Gemeinde are skipped. Afterwards the
-`germany_forecast_publish` job publishes the run, applies retention and
+`forecast_publish` job publishes the run, applies retention and
 runs checks 5-6.
 """
 

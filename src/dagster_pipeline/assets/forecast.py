@@ -33,13 +33,11 @@ KEEP_COMPLETE_RUNS = 2
 
 @dg.asset(
     key=NORMALIZED_ICON_BRIDGE_KEY,
-    # The bridge is built from Berlin's normalized.icon_cell, not from the raw grid.
     deps=[NORMALIZED_HIERARCHY_KEY, NORMALIZED_ICON_CELL_KEY],
     group_name=STATIC_GROUP,
     description=(
-        "Germany grid subset (ICON cells intersecting a Gemeinde, transformed "
-        "from the Berlin cell polygons to EPSG:3035) and the cell-Gemeinde area "
-        "bridge. Berlin's mask and bridges are read, never written."
+        "Cell-Gemeinde area bridge: the area of every ICON cell "
+        "(normalized.icon_cell, EPSG:3035) inside every Gemeinde."
     ),
 )
 def normalized_icon_gemeinde_bridge(context: dg.AssetExecutionContext) -> None:
@@ -53,8 +51,8 @@ def normalized_icon_gemeinde_bridge(context: dg.AssetExecutionContext) -> None:
         if not cells:
             # Raised inside the transaction, so the previous bridge is kept.
             raise RuntimeError(
-                f"Germany bridge is empty: normalized.icon_cell has no cells for "
-                f"{SOURCE_GRID_ID}; build Berlin's static data first"
+                f"Bridge is empty: normalized.icon_cell has no cells for "
+                f"{SOURCE_GRID_ID}; materialize normalized/icon_cell first"
             )
     context.add_output_metadata(
         {

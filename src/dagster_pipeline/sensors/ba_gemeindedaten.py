@@ -4,7 +4,7 @@ The BA publishes the file for 30 June of a year in January of the next year
 (the 2025 file on 15 Jan 2026; the imprint announces the next for
 15 Jan 2027). Once a day the sensor sends one HEAD request for the vintage
 after the newest one loaded; when the file exists it requests the
-germany_employment job for that reference date. The checks then compare the
+employment job for that reference date. The checks then compare the
 new vintage with the source totals and list its territorial changes for
 review (see ADR 019). Off by default, like the DWD sensor: it polls an
 external host.
@@ -44,7 +44,7 @@ def ba_run_key(reference_date: date) -> str:
     default_status=dg.DefaultSensorStatus.STOPPED,
     description=(
         "Daily HEAD request for the next yearly BA Gemeindedaten file; "
-        "requests germany_employment for it once it is published."
+        "requests employment for it once it is published."
     ),
 )
 def ba_gemeindedaten_release_sensor(
