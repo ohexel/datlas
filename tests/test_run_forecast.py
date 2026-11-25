@@ -1,4 +1,5 @@
-"""Protect the manual forecast runner's interface and source availability gate."""
+"""The command-line runners: the forecast runner's interface and source
+availability gate, and help that never starts a job."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -149,3 +150,20 @@ def test_manual_forecast_error_is_concise_and_traceback_free(
     error = capsys.readouterr().err
     assert "error: Recent DWD run has not been published." in error
     assert "Traceback" not in error
+
+
+def test_run_static_help_does_not_start_the_job(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    from src import run_static
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("--help started the static job")
+
+    monkeypatch.setattr(run_static, "run_static", forbidden)
+    with pytest.raises(SystemExit) as observed:
+        run_static.main(["--help"])
+
+    assert observed.value.code == 0
+    assert "Build the static inputs once" in capsys.readouterr().out

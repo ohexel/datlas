@@ -16,6 +16,8 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       FORECAST_RETENTION_HOURS: ${FORECAST_RETENTION_HOURS:-24}
+      # Needed only while the Zensus files are not under data/raw/germany/.
+      ZENSUS2022_TOKEN: ${ZENSUS2022_TOKEN:-}
       DAGSTER_HOME: /app/.dagster_home
       PYTHONPATH: /app
       HOME: /tmp

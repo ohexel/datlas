@@ -10,6 +10,7 @@ data/raw/germany/. Safe to repeat: an existing geography version is left
 unchanged; population and bridge are rebuilt.
 """
 
+import argparse
 import json
 import logging
 from pathlib import Path
@@ -43,7 +44,11 @@ def run_static(project_root: Path = PROJECT_ROOT) -> dict[str, object]:
     }
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description=__doc__.split("\n\n")[0].replace("\n", " ")
+    )
+    parser.parse_args(argv)  # no options; --help must not start the job
     logging.basicConfig(
         format="%(asctime)s %(levelname)s %(name)s %(message)s", level=logging.INFO
     )
