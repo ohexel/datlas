@@ -45,7 +45,7 @@ Berlin and the temperature theme are unchanged in behaviour.
 ## Verified (14 Nov 2026)
 
 On the maintainer's installed database; BA vintage 30 June 2025, forecast run
-2026-11-14 09:00 UTC. Details in [germany-layer-facts.md](germany-layer-facts.md).
+2026-11-14 09:00 UTC. Details in [germany-layer-facts.md](facts.md).
 
 | What | Result |
 | --- | --- |

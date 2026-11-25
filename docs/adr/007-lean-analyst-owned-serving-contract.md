@@ -1,6 +1,6 @@
 # ADR 007: Serve observations and reference facts, not analyst decisions
 
-Status: Accepted.
+Status: Accepted in the capstone; still holds for datlas (ADR 021). Its examples refer to the Berlin capstone.
 
 ## Context
 

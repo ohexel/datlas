@@ -1,4 +1,4 @@
-"""Germany checks 4-6. Thresholds are documented in docs/germany-layer.md."""
+"""Germany checks 4-6. Thresholds are documented in docs/pipeline.md."""
 
 import dagster as dg
 

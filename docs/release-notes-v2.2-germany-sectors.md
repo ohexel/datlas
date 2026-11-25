@@ -51,7 +51,7 @@ other themes are unchanged in behaviour.
 ## Verified (14 Nov 2026)
 
 On the maintainer's installed database; files of 31 Mar 2026 and 31 Mar 2025.
-Details in [germany-layer-facts.md](germany-layer-facts.md).
+Details in [germany-layer-facts.md](facts.md).
 
 | What | Result |
 | --- | --- |

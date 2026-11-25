@@ -5,7 +5,7 @@
 -- Grid cells are built directly in EPSG:3035 (ETRS89-LAEA), the equal-area
 -- projection used for all area weights. The earlier route through
 -- EPSG:25833 gave the same cells to within a relative difference of
--- 5e-12 (docs/germany-layer-facts.md).
+-- 5e-12 (docs/facts.md).
 
 CREATE EXTENSION IF NOT EXISTS postgis WITH SCHEMA public;
 

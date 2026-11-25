@@ -1,6 +1,10 @@
 # ADR 014: Equal-area projection for Germany-wide area weights
 
 Status: Accepted on the `germany-layer` branch (14 Nov 2026).
+Amended by [ADR 021](021-separation-from-the-capstone.md): since the separation the
+cells are built directly in EPSG:3035 instead of being transformed from the
+Berlin cells in EPSG:25833 (same triangles up to rounding), and check 7 is
+removed.
 
 ## Context
 

@@ -1,11 +1,15 @@
-# Germany layer: measured facts
+# Measured facts
 
 Only values measured on this project's data and runs; nothing here is
-estimated. Regenerated on 14 Nov 2026 from the installed database
-(PostgreSQL 16.9, PostGIS 3.5.2, reached from the sandbox), the raw files and
-the test runs of that day. The current forecast run is 2026-11-14 09:00 UTC.
-Earlier measurements are kept only where a decision rests on them; they are
-in the last section, with their dates.
+estimated. Re-measured on 25 Nov 2026 on the standalone installation
+(PostgreSQL 16.9, PostGIS 3.5.2, container `datlas_postgres`, reached from the
+sandbox): a database built from empty with `run_static`, `run_employment` and
+`run_sectors`, the forecast run 2026-11-25 15:00 UTC, and the test runs of that
+day. Values that depend only on the data were measured on 14 Nov on the
+capstone database and reproduced identically on 25 Nov (comparison in
+[ADR 021](adr/021-separation-from-the-capstone.md)); they are marked. Earlier
+measurements are kept only where a decision rests on them; they are in the last
+section, with their dates.
 
 Sizes in MB are PostgreSQL's `pg_size_pretty` units (1 MB = 1,048,576 bytes);
 file sizes are given in bytes.
@@ -35,55 +39,65 @@ file sizes are given in bytes.
 | Invalid geometries, Länder / Kreise / Gemeinden | 0 / 0 / 0 |
 | Largest relative difference, Σ Gemeinde area vs. Kreis area | 5.0 × 10⁻¹⁵ |
 
-## Checks (run 14 Nov 2026 on the installed data)
+## Checks (run 25 Nov 2026)
 
-All seven asset checks pass. Check 7 is defined with warning severity.
+All 17 asset checks pass on the new database (current run 2026-11-25 15:00
+UTC, BA reference date 30 June 2025, BA file date 31 March 2026).
 
 | Check | Result |
 | --- | --- |
-| 1 Key coverage | pass; 204 non-blocking exceptions (unincorporated areas without a census record), 0 blocking |
-| 2 Hierarchy integrity | pass; 0 violations; 400 Kreise checked for the area partition, largest relative difference 5.0 × 10⁻¹⁵ (tolerance 10⁻⁹) |
-| 3 Source totals | pass; 400 of 400 Kreise and 16 of 16 Länder exact; Σ Gemeinden 82,711,282 against the published Germany total 82,719,540, difference 8,258 = expected (consistent with staff abroad counted at Bund level only; the number is not published) |
-| 4 Bridge coverage | pass; 10,990 Gemeinden, coverage 0.9999999999998317 … 1.0000000000001266, 0 exceptions (threshold 0.999) |
-| 5 Forecast completeness | pass; runs 2026-11-09 19:00 and 2026-11-14 09:00 UTC each 25 of 25 lead times, 274,750 of 274,750 rows |
-| 6 Plausibility | pass; 0 NULL and 0 out-of-bounds rows among 274,750 Gemeinde and 2,059,525 cell rows; observed −4.42 … 11.69 °C (temperature), −8.73 … 9.41 °C (apparent) |
-| 7 Berlin cross-layer, run 2026-11-14 09:00 UTC | pass; 25 lead times; max difference 0.00090 °C (temperature), 0.00086 °C (apparent); tolerance 0.01 °C |
-| 7 Berlin cross-layer, run 2026-11-09 19:00 UTC (re-run 14 Nov) | 0.00067 °C (temperature), 0.00096 °C (apparent) |
+| Grid | 272,089 vertices, 542,040 cells, 1,626,120 topology rows; 542,040 valid triangles in EPSG:3035; 0 rejected |
+| VG250 and Zensus source contracts | 0 failures |
+| 1 Key coverage | 204 non-blocking exceptions (unincorporated areas without a census record), 0 blocking |
+| 2 Hierarchy integrity | 0 violations; 400 Kreise checked for the area partition, largest relative difference 5.0 × 10⁻¹⁵ (tolerance 10⁻⁹) |
+| 3 Source totals | 400 of 400 Kreise and 16 of 16 Länder exact; Σ Gemeinden 82,711,282 against the published Germany total 82,719,540, difference 8,258 = expected |
+| 4 Bridge coverage | 10,990 Gemeinden, coverage 0.999999999999769 … 1.0000000000001321, 0 exceptions (threshold 0.999) |
+| 5 Forecast completeness | run 2026-11-25 15:00 UTC: 25 of 25 lead times, 274,750 of 274,750 rows |
+| 6 Plausibility | 0 NULL and 0 out-of-bounds rows among 274,750 Gemeinde and 2,059,525 cell rows; observed −7.44 … 5.67 °C (temperature), −13.49 … 2.29 °C (apparent) |
+| 8–11 BA Gemeindedaten | 0 failures; source totals: 3,110 comparisons, 2,620 exact, 490 with suppressed parts |
+| 12–15 BA sectors | 0 failures; 400 Kreis files, 17 WZ booklets; Kreis totals = Gemeindedaten in 400 of 400 Kreise |
 
-## Grid subset and bridge (ICON grid `icon_grid_0047_R19B07_L`)
+## Grid and bridge (ICON grid `icon_grid_0047_R19B07_L`)
 
 | Fact | Value |
 | --- | ---: |
-| ICON cells intersecting a Gemeinde | 82,381 |
-| Mean cell area, EPSG:3035 | 4.44 km² |
+| Grid file `icon_grid_0047_R19B07_L.nc.bz2` | 201,429,184 bytes |
+| Cells in `normalized.icon_cell` (whole ICON-D2 domain, EPSG:3035) | 542,040 |
+| Mean cell area, all cells / cells in the bridge | 4.438 / 4.442 km² |
+| Cells in the bridge (= cells of a forecast) | 82,381 |
+| Cells touching a Gemeinde without sharing area | 0 |
 | Cell-Gemeinde bridge rows | 184,464 |
 | Gemeinden in the bridge | 10,990 |
-| Berlin bridge cells missing from the Germany subset | 0 |
-| Size `de_icon_cell` (heap + indexes) | 48 MB |
-| Size `de_icon_cell_gemeinde_bridge` (heap + indexes, incl. the foreign-key index) | 79 MB |
+| Size `raw.icon_grid_vertex` / `raw.icon_grid_cell_vertex` (heap + indexes) | 35 MB / 240 MB |
+| Size `normalized.icon_cell` (heap + indexes) | 139 MB (90 + 49) |
+| Size `normalized.icon_cell_gemeinde_bridge` (heap + indexes) | 48 MB |
 
-Comparison of the cells and bridge rebuilt with `ST_Transform` (14 Nov) with
-the earlier ones built from vertices: identical row sets; largest absolute
-difference of `fraction_of_gemeinde` 4.05 × 10⁻¹²; largest relative
-difference of cell area 4.85 × 10⁻¹²; relative difference of intersection
-area up to 1.58 × 10⁻⁷, only for slivers (0.0026 m²), at most 5.7 × 10⁻¹⁰ for
-intersections of 1,000 m² or more.
+Cells built directly in EPSG:3035 against the capstone's route through
+EPSG:25833 (14 Nov, on the 82,381 cells of the bridge): identical row sets;
+largest absolute difference of `fraction_of_gemeinde` 4.05 × 10⁻¹²; largest
+relative difference of cell area 4.85 × 10⁻¹²; relative difference of
+intersection area up to 1.58 × 10⁻⁷, only for slivers (0.0026 m²), at most
+5.7 × 10⁻¹⁰ for intersections of 1,000 m² or more. On the 25 Nov comparison
+the largest difference of an intersection area was 2.1 × 10⁻⁵ m².
 
 ## Forecast runs and storage
-
-Retained runs: 2026-11-09 19:00 UTC and 2026-11-14 09:00 UTC (both complete);
-current run 2026-11-14 09:00 UTC.
 
 | Fact | Value |
 | --- | ---: |
 | Cell rows per run (82,381 cells × 25 lead hours) | 2,059,525 |
 | Gemeinde rows per run (10,990 × 25) | 274,750 |
 | Serving rows, current run: Gemeinde / Kreis / Land / Bund | 274,750 / 10,000 / 400 / 25 |
-| DWD GRIB files, run 2026-11-14 09:00 UTC (4 fields × 25 lead times) | 82,102,546 bytes; 3,284,102 bytes per lead time on average |
-| `de_icon_cell_value`, 2 runs (heap + indexes) | 588 MB (355 + 233) |
-| `de_gemeinde_forecast`, 2 runs (heap + indexes) | 194 MB (105.7 + 88.5) |
+| DWD GRIB files of one run (4 fields × 25 lead times), 2026-11-25 15:00 UTC | 81,516,384 bytes |
+| `normalized.icon_cell_value`, one run, freshly written (heap + indexes) | 180 MB (118 + 62) |
+| `normalized.gemeinde_forecast`, one run (heap + indexes) | 53 MB |
+| Whole database: grid, hierarchy, one run, employment, sectors | 1,081 MB |
 
-## Values of the current run (2026-11-14 09:00 UTC)
+## Values of the run 2026-11-14 09:00 UTC
+
+Measured 14 Nov on the capstone database; the standalone installation
+reproduced this run on 25 Nov with Gemeinde values within 6.3 × 10⁻¹² °C and
+an identical `values.json`.
+
 
 | Fact | Value |
 | --- | ---: |
@@ -94,51 +108,49 @@ current run 2026-11-14 09:00 UTC.
 | Germany, apparent temperature, area-weighted: 24-hour maximum / minimum | 2.93 °C (14 Nov 14:00) / −3.09 °C (15 Nov 05:00), Berlin time |
 | Germany, apparent temperature, population-weighted: 24-hour maximum / minimum | 3.46 °C / −2.69 °C |
 
-## Runtimes (14 Nov 2026, sandbox → host PostgreSQL)
+## Runtimes (25 Nov 2026, sandbox → PostgreSQL container on the host)
 
 | Step | Duration |
 | --- | ---: |
-| Static job `python -m src.germany.run_static` (6 checks pass, counts unchanged) | 143.4 s |
-| `refresh_de_icon_bridge` (ST_Transform of cells + bridge) on an installed database | 126 s |
-| Same without the foreign-key index on the bridge | 648 s |
-| Forecast run 2026-11-14 09:00 UTC, 25 partitions incl. DWD download and decoding | 141.5 s (5.7 s per partition) |
-| Publish (checks 5–7, retention) | 35.8 s |
+| `run_static` on an empty database, grid file on disk (7 checks pass) | 3 min 59 s |
+| of which: raw grid load / cell build / bridge | 60 s / 45 s / 1 min 43 s |
+| Same, before the bridge analyzed its tables first | bridge 8 min 33 s |
+| Same with the grid download (201 MB) | 5 min 11 s |
+| Forecast run 2026-11-25 15:00 UTC, 25 partitions incl. DWD download and decoding | 143.5 s (5.7 s per partition) |
+| Forecast run 2026-11-14 09:00 UTC, 25 partitions, GRIB files on disk | 84.4 s (3.4 s per partition) |
+| Publish (retention, checks 5–6), before the export was part of it | 18.4 s |
+| Publish with map export (tiles exist) | 43.6 s |
+| Map export with tile build into an empty folder | 42.7 s |
 
-## Map export (run 2026-11-14 09:00 UTC)
+## Map export
 
 | Fact | Value |
 | --- | ---: |
-| Boundary tiles `vg250-2022-12-31.pmtiles` (3 layers, zoom 4–10, tippecanoe v2.53.0) | 13,139,513 bytes |
-| `values.json` (schema 2, maxima and minima; 10,990 + 400 + 16 regions) | 5,259,646 bytes; 395,044 gzip-compressed |
-| Same before the minima were added | 3,511,495 bytes; 281,537 gzip-compressed |
-| Export of values only (tiles exist) | 26.2 s |
-| Export with tile rebuild (before the minima were added) | 41.2 s |
-| Scripted session in headless Chromium (load at Kreise, Gemeinden, three zoom steps, Länder, Tiefstwerte), requests to `data/` | 19 (values.json + 18 tile ranges), 8,382,022 bytes uncompressed, of which values.json 5,259,646; largest tile range 484,160 bytes |
+| Boundary tiles `vg250-2022-12-31.pmtiles` (3 layers, zoom 4–10, tippecanoe v2.53.0) | 13,139,512 bytes; tile data identical to the 14 Nov build |
+| `values.json`, run 2026-11-14 09:00 UTC / 2026-11-25 15:00 UTC | 5,259,619 / 5,288,497 bytes |
+| `employment.json` (30 June 2025) / `sectors.json` (31 March 2026) | 2,242,571 / 170,876 bytes |
+
+Measured 14 Nov on the page (headless Chromium, run 2026-11-14 09:00 UTC):
+
+| Fact | Value |
+| --- | ---: |
+| Scripted session (load at Kreise, Gemeinden, three zoom steps, Länder, Tiefstwerte), requests to `data/` | 19 (values.json + 18 tile ranges), 8,382,022 bytes uncompressed; largest tile range 484,160 bytes |
 | Console and page errors (1400 × 900 and 390 × 844; level and max/min switches, details panel) | 0 |
 | Horizontal overflow at 390 px | none |
 | HTTP Range on www.ohexel.com and ohexel.com (232 MB file), tested 2026-11-09 | 206 for first, middle and suffix ranges |
+| Revalidation of `values.json` on www.ohexel.com with `If-None-Match`, tested 2026-11-25 | 304 |
 
-## Tests (14 Nov 2026)
+## Tests (25 Nov 2026)
 
 | Suite | Result |
 | --- | ---: |
-| Default suite `uv run python -m pytest` | 171 passed, 53 deselected |
-| Germany test cases (5 files, 45 test functions) | 69: 43 in the default suite, 5 integration, 21 acceptance |
-| Germany integration tests (`-m integration`) | 5 passed in 19.1 s |
-| Germany acceptance tests on the installed data | 21 passed in 230.2 s |
-| Same on the branch `germany-employment` (second theme) | default suite 181 passed, 56 deselected; Germany test cases 82 in 6 files (54 functions): 53 default, 6 integration (passed in 14.1 s), 23 acceptance (passed in 166.6 s) |
-| Same on the branch `germany-sectors` (third theme) | default suite 193 passed, 60 deselected; Germany test cases 98 in 7 files: 65 default, 7 integration (passed in 14.1 s), 26 acceptance (passed) |
-| After the test triage (branch `test-triage`, 14 Nov 2026) | default suite 161 passed, 43 deselected; Germany test cases 49 in 8 files (38 functions): 33 default, 6 integration (passed in 15.2 s), 10 acceptance (passed in 100.3 s; 177.4 s before) |
+| Default suite `uv run python -m pytest` | 81 passed |
+| Database tests `-m integration` | 8 passed in 10.5 s |
+| Acceptance tests `-m acceptance` on the installed data | 9 passed in 40–48 s |
+| All tests `-m ""` | 98 passed in 76.6 s |
 | `ruff check` | all checks passed |
 
-Diff against `main` outside the Germany paths: 5 files added, 46 modified;
-783 lines added, 127 removed. The removed lines are the unused
-`from __future__ import annotations` and the blank line after it in 38 modules
-(76 lines), and 51 lines of `uv.lock`, re-resolved when the ruff dev
-dependency was added (lock revision 3 to 5; it drops an orphaned `pyarrow`
-entry that no package depends on).
-
-## Employment theme: BA Gemeindedaten (measured 14 Nov 2026)
+## Employment theme: BA Gemeindedaten (measured 14 Nov 2026, reproduced 25 Nov)
 
 Vintage 30 June 2025, on geography version `vg250-2022-12-31`.
 
@@ -147,17 +159,17 @@ Vintage 30 June 2025, on geography version `vg250-2022-12-31`.
 | xlsx file | 1,608,751 bytes |
 | Rows in sheet `Gemeindedaten`: Gemeinden / Kreise / Regierungsbezirke / Länder | 10,752 / 294 / 20 / 16 |
 | Rows in sheet `Länder`: Länder / unassigned / Germany | 16 / 1 / 1 |
-| `raw.de_ba_gemeindedaten` rows | 11,100 |
+| `raw.ba_gemeindedaten` rows | 11,100 |
 | Suppressed cells (`*`), all in Gemeinde rows | 7,723 |
 | Gemeinden without employees at place of work (suppressed) | 1,257 |
 | BA Gemeinden without a VG250 key / incorporated VG250 Gemeinden without a BA row / unincorporated areas without a BA row | 4 / 38 / 204 |
 | Kreise with a Kreis row / taken from their single Gemeinde row | 294 / 106 |
-| `normalized.de_indicator_value` rows (13 indicators) | 148,291 |
+| `normalized.indicator_value` rows (13 indicators) | 148,291 |
 | of which Gemeinden: value / suppressed / not reported | 132,002 / 7,722 / 3,146 |
 | of which Kreise / Länder / Germany: value | 5,200 / 208 / 13 |
-| Size `raw.de_ba_gemeindedaten` / `normalized.de_indicator_value` (heap + indexes) | 17 MB / 81 MB |
-| `run_employment` (job `germany_employment`: download skipped, raw load, refresh, 4 checks) | 12.1 s |
-| Refresh `refresh_de_ba_indicators` | 5.3 s |
+| Size `raw.ba_gemeindedaten` / `normalized.indicator_value` (heap + indexes) | 17 MB / 81 MB |
+| `run_employment` (job `employment`: download skipped, raw load, refresh, 4 checks), 25 Nov on a new database | 11.0 s |
+| Refresh `refresh_ba_indicators` | 5.3 s |
 | Download, structural check and parse of the file | 5.2 s |
 
 Checks on this vintage, all passing:
@@ -182,7 +194,7 @@ Checks on this vintage, all passing:
 Map export with the employment theme (tiles exist): 21.3 s;
 `employment.json` 2,242,571 bytes, 247,945 gzip-compressed.
 
-## Sector theme: BA Regionalreport and WZ booklets (measured 14 Nov 2026)
+## Sector theme: BA Regionalreport and WZ booklets (measured 14 Nov 2026, reproduced 25 Nov)
 
 Files for 31 Mar 2026 (Regionalreport, WZ booklets) and 31 Mar 2025 (WZ
 booklets for the year-on-year change), on geography version
@@ -194,12 +206,12 @@ booklets for the year-on-year change), on geography version
 | Downloads for 31 Mar 2025: WZ booklets / bytes / time | 17 / 10,337,979 / 24.4 s |
 | Retries needed | 0 |
 | Files on disk: Regionalreport / WZ booklets | 212,590,275 / 20,215,764 bytes |
-| `raw.de_ba_regionalreport` rows: table 2.3 / table 2.1 (400 files × 5 quarters) | 52,000 / 120,000 |
+| `raw.ba_regionalreport` rows: table 2.3 / table 2.1 (400 files × 5 quarters) | 52,000 / 120,000 |
 | Suppressed cells in table 2.3 (all Kreise, five quarters) | 1,278 |
-| `raw.de_ba_wz_heft` rows per quarter (17 booklets) / suppressed in column 1 | 6,120 / 915 (2026), 885 (2025) |
-| Sector rows in `normalized.de_indicator_value`: Kreise value / suppressed; Länder value / suppressed; Germany value | 44,788 / 1,212; 2,720 / 192; 182 |
-| Size `raw.de_ba_regionalreport` / `raw.de_ba_wz_heft` (heap + indexes) | 171 MB / 14 MB |
-| `run_sectors` with files on disk (raw load of both quarters, refresh, 4 checks) | 69.0 s |
+| `raw.ba_wz_heft` rows per quarter (17 booklets) / suppressed in column 1 | 6,120 / 915 (2026), 885 (2025) |
+| Sector rows in `normalized.indicator_value`: Kreise value / suppressed; Länder value / suppressed; Germany value | 44,788 / 1,212; 2,720 / 192; 182 |
+| Size `raw.ba_regionalreport` / `raw.ba_wz_heft` (heap + indexes), 14 Nov on the capstone database | 171 MB / 14 MB |
+| `run_sectors` with files on disk (raw load of both quarters, refresh, 4 checks), 25 Nov on a new database | 69.5 s |
 | Refresh `refresh_sectors` (catalogue, values, quality notes) | 3.1 s |
 
 Checks, all passing for the file date 31 Mar 2026:
@@ -266,12 +278,12 @@ Measured 2026-11-09; basis for ADR 018.
 | Layout, 2 retained runs | Size (heap + indexes) |
 | --- | ---: |
 | First layout `de_icon_cell_weather` (run, lead time and grid keys on every row) | 1,259 MB (743 + 516) |
-| Slim layout `de_icon_cell_value`, freshly written | 361 MB (237 + 124) |
+| Slim layout `icon_cell_value`, freshly written | 361 MB (237 + 124) |
 | Slim layout with `real` (float4) instead of `double precision` (not adopted) | 329 MB (205 + 124) |
 
-The current 588 MB (above) is the same slim layout after retention cycles; on
-9 Nov, after one cycle, it was 541 MB, because the space of a pruned run is
-reused by PostgreSQL, not returned to the operating system.
+On the capstone database on 14 Nov the same layout took 588 MB for two runs
+after several retention cycles (541 MB on 9 Nov after one), because the space
+of a pruned run is reused by PostgreSQL, not returned to the operating system.
 
 ### Weighting example
 

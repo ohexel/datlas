@@ -1,6 +1,6 @@
 # ADR 004: Preserve population quality failures instead of inventing values
 
-Status: Accepted.
+Status: Accepted in the capstone; still holds for datlas (ADR 021). Its examples refer to the Berlin capstone.
 
 ## Context
 
