@@ -151,7 +151,7 @@ def prune_forecast_database_rows(
     connect = connection_factory if connection_factory is not None else database_connection
     affected_rows: dict[str, int] = {}
 
-    with connect(application_name="capstone_forecast_retention") as connection:
+    with connect(application_name="datlas_forecast_retention") as connection:
         for table_name in FORECAST_RETENTION_TABLES:
             if dry_run:
                 row = connection.execute(

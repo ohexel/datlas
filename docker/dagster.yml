@@ -1,3 +1,5 @@
+name: ${COMPOSE_PROJECT_NAME:-datlas}
+
 services:
   dagster:
     build:
@@ -19,7 +21,7 @@ services:
       PYTHONPATH: /app
       HOME: /tmp
     ports:
-      - "127.0.0.1:${DAGSTER_PORT:-3000}:3000"
+      - "127.0.0.1:${DAGSTER_PORT:-3001}:3000"
     volumes:
       - ..:/app
       - ./dagster-container.env:/app/.env:ro

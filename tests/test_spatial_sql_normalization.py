@@ -9,7 +9,7 @@ def test_postgis_normalizes_plr_and_icon_geometry():
     grid_id = "phase_5_icon_fixture"
 
     with database_connection(
-        application_name="capstone_phase_5_test"
+        application_name="datlas_phase_5_test"
     ) as connection:
         copy_rows(
             connection,

@@ -58,7 +58,7 @@ class DatabaseSettings:
 def database_connection(
     settings: DatabaseSettings | None = None,
     *,
-    application_name: str = "capstone",
+    application_name: str = "datlas",
 ) -> Iterator[Connection]:
     resolved = settings or DatabaseSettings.from_env()
 

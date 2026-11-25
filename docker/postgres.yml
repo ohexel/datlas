@@ -1,16 +1,18 @@
+name: ${COMPOSE_PROJECT_NAME:-datlas}
+
 services:
   postgres:
     image: postgis/postgis:16-3.5
-    container_name: ${POSTGRES_CONTAINER_NAME:-capstone_postgres}
+    container_name: ${POSTGRES_CONTAINER_NAME:-datlas_postgres}
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5432"
     volumes:
-      - capstone_postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test:
         [
@@ -23,4 +25,4 @@ services:
       start_period: 10s
 
 volumes:
-  capstone_postgres_data:
+  postgres_data:

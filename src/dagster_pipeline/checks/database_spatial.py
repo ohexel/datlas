@@ -19,7 +19,7 @@ def icon_cell_geometry_quality(
     context: dg.AssetCheckExecutionContext,
 ) -> dg.AssetCheckResult:
     with database_connection(
-        application_name="capstone_icon_geometry_check"
+        application_name="datlas_icon_geometry_check"
     ) as connection:
         result = connection.execute(
             """

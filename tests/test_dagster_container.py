@@ -15,7 +15,7 @@ def test_dagster_overlay_preserves_database_and_shared_state_boundaries() -> Non
     assert "- ..:/app" in overlay
     assert "condition: service_healthy" in overlay
     assert 'user: "${DAGSTER_UID:-1000}:${DAGSTER_GID:-1000}"' in overlay
-    assert '"127.0.0.1:${DAGSTER_PORT:-3000}:3000"' in overlay
+    assert '"127.0.0.1:${DAGSTER_PORT:-3001}:3000"' in overlay
     assert "cpus: ${DAGSTER_CPUS:-3.0}" in overlay
     assert "mem_limit: ${DAGSTER_MEMORY_LIMIT:-10g}" in overlay
 
@@ -24,8 +24,8 @@ def test_dagster_image_keeps_locked_dependencies_outside_project_mount() -> None
     dockerfile = (PROJECT_ROOT / "docker" / "dagster.dockerfile").read_text()
 
     assert "FROM python:3.11-slim" in dockerfile
-    assert "UV_PROJECT_ENVIRONMENT=/opt/capstone-venv" in dockerfile
-    assert 'PATH="/opt/capstone-venv/bin:${PATH}"' in dockerfile
+    assert "UV_PROJECT_ENVIRONMENT=/opt/datlas-venv" in dockerfile
+    assert 'PATH="/opt/datlas-venv/bin:${PATH}"' in dockerfile
     assert "COPY pyproject.toml uv.lock README.md ./" in dockerfile
     assert "uv sync --frozen --no-install-project --no-dev" in dockerfile
 

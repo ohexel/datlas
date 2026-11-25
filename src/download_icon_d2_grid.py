@@ -147,7 +147,7 @@ def main() -> int:
 
         session = requests.Session()
         session.headers.update(
-            {"User-Agent": "berlin-capstone-icon-d2-grid-downloader/1.0"}
+            {"User-Agent": "datlas-icon-d2-grid-downloader/1.0"}
         )
 
         download_info = download_file(session, target, logger)

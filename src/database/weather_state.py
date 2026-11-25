@@ -116,7 +116,7 @@ def weather_population_partition_complete(
     satisfies its PostgreSQL quality contract.
     """
     with database_connection(
-        application_name="capstone_weather_population_state"
+        application_name="datlas_weather_population_state"
     ) as connection:
         result = connection.execute(
             """

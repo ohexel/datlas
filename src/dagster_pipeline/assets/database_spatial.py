@@ -72,7 +72,7 @@ def normalized_icon_cell(
     context: dg.AssetExecutionContext,
 ) -> None:
     with database_connection(
-        application_name="capstone_icon_cell_normalize"
+        application_name="datlas_icon_cell_normalize"
     ) as connection:
         summary = connection.execute(
             """

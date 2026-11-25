@@ -17,7 +17,7 @@ def test_database_settings_reports_missing_variables():
 
 def test_database_boundary_copy_and_transaction_rollback():
     with database_connection(
-        application_name="capstone_phase_3_test"
+        application_name="datlas_phase_3_test"
     ) as connection:
         health = database_health(connection)
 

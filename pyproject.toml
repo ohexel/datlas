@@ -1,7 +1,7 @@
 [project]
-name = "capstone"
+name = "datlas"
 version = "0.1.0"
-description = "Reproducible Berlin neighborhood temperature and historical-context pipeline"
+description = "Public data for German regions on a map: temperature forecast, employment and industry"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

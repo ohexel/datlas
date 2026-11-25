@@ -5,7 +5,7 @@ from src.database.connection import database_connection
 
 def test_apparent_temperature_shade_formula_fixture() -> None:
     with database_connection(
-        application_name="capstone_apparent_temperature_formula_test"
+        application_name="datlas_apparent_temperature_formula_test"
     ) as connection:
         result = connection.execute(
             """

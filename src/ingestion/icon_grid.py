@@ -227,7 +227,7 @@ def load_icon_grid_raw(
         )
 
     with database_connection(
-        application_name="capstone_icon_grid_load"
+        application_name="datlas_icon_grid_load"
     ) as connection:
         # Deleting the grid source cascades through vertices
         # and topology. PostgreSQL owns dependent-row cleanup.

@@ -231,7 +231,7 @@ def load_icon_d2_ruc_raw_partition(
     retained_row_count = 0
 
     with database_connection(
-        application_name='capstone_icon_d2_ruc_raw_load'
+        application_name='datlas_icon_d2_ruc_raw_load'
     ) as connection:
         mask = current_weather_mask(
             connection,

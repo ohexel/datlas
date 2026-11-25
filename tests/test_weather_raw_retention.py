@@ -71,7 +71,7 @@ class FakeConnection:
 def _connection_factory(connection: FakeConnection):
     @contextmanager
     def connect(*, application_name: str):
-        assert application_name == "capstone_forecast_retention"
+        assert application_name == "datlas_forecast_retention"
         yield connection
 
     return connect
