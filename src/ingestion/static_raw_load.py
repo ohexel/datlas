@@ -16,6 +16,7 @@ import shapely
 from psycopg import Connection
 
 from src.database.connection import database_connection
+from src.database.schema import apply_base_schema
 from src.database.load import copy_rows
 from src.ingestion.static_sources import sha256_file
 from src.ingestion.contract import (
@@ -63,8 +64,9 @@ class RawLoadResult:
     duration_seconds: float
 
 
-def apply_germany_schema(connection: Connection) -> None:
-    """Apply the additive, idempotent Germany DDL."""
+def apply_raw_schema(connection: Connection) -> None:
+    """Apply the base schema and the idempotent raw DDL of the static sources."""
+    apply_base_schema(connection)
     connection.execute(SCHEMA_PATH.read_text(encoding="utf-8"))
 
 
@@ -173,7 +175,7 @@ def load_vg250_raw(
     results: list[RawLoadResult] = []
 
     with database_connection(application_name="datlas_vg250_load") as connection:
-        apply_germany_schema(connection)
+        apply_raw_schema(connection)
         connection.execute(
             "DELETE FROM raw.de_vg250 WHERE source_sha256 = %s",
             (archive_sha256,),
@@ -289,7 +291,7 @@ def load_zensus_raw(
     contract: ZensusContract = ZENSUS_CONTRACT,
 ) -> list[RawLoadResult]:
     with database_connection(application_name="datlas_zensus_load") as connection:
-        apply_germany_schema(connection)
+        apply_raw_schema(connection)
         return [
             load_zensus_extract(connection, extract, project_root, contract)
             for extract in contract.extracts

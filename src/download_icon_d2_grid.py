@@ -100,23 +100,11 @@ def download_file(session: requests.Session, target: Path, logger: logging.Logge
         }
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(
-        description="Download the official DWD ICON-D2 grid definition."
-    )
-    parser.add_argument(
-        "--output-dir",
-        default=DEFAULT_OUTPUT_DIR,
-        help=f"Landing directory (default: {DEFAULT_OUTPUT_DIR})",
-    )
-    parser.add_argument(
-        "--overwrite",
-        action="store_true",
-        help="Replace an existing grid file. Default is to fail if it already exists.",
-    )
-    args = parser.parse_args()
+def download_grid(output_dir: Path, *, overwrite: bool = False) -> dict:
+    """Download the grid file into output_dir and write metadata.json there.
 
-    output_dir = Path(args.output_dir)
+    Returns the metadata; its "status" is "success" or "failed".
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
 
     logger = configure_logging(output_dir)
@@ -139,7 +127,7 @@ def main() -> int:
     }
 
     try:
-        if target.exists() and not args.overwrite:
+        if target.exists() and not overwrite:
             raise FileExistsError(
                 f"{target} already exists. "
                 "Use --overwrite if you intentionally want to replace it."
@@ -172,7 +160,7 @@ def main() -> int:
         metadata["status"] = "failed"
         metadata["error"] = str(exc)
 
-        if target.exists() and metadata["status"] == "failed":
+        if target.exists():
             target.unlink(missing_ok=True)
 
     metadata["completed_at"] = utc_now()
@@ -182,7 +170,39 @@ def main() -> int:
         encoding="utf-8",
     )
     logger.info("Metadata written to %s", metadata_path)
+    return metadata
 
+
+def ensure_grid_file(source_path: Path = ICON_D2_GRID_CONTRACT.source_path) -> Path:
+    """Return the grid file, downloading it from DWD first if it is missing."""
+    if source_path.exists():
+        return source_path
+    metadata = download_grid(source_path.parent)
+    if metadata["status"] != "success":
+        raise RuntimeError(
+            f"ICON grid download failed: {metadata.get('error')}; "
+            f"see {source_path.parent / 'metadata.json'}"
+        )
+    return source_path
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Download the official DWD ICON-D2 grid definition."
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=DEFAULT_OUTPUT_DIR,
+        help=f"Landing directory (default: {DEFAULT_OUTPUT_DIR})",
+    )
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="Replace an existing grid file. Default is to fail if it already exists.",
+    )
+    args = parser.parse_args()
+
+    metadata = download_grid(Path(args.output_dir), overwrite=args.overwrite)
     return 0 if metadata["status"] == "success" else 1
 
 

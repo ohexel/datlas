@@ -44,13 +44,14 @@ def load_cell_indices(
     connection: Connection,
     geography_version: str = GEOGRAPHY_VERSION,
 ) -> np.ndarray:
-    """Germany cell indices, ascending (rows of normalized.de_icon_cell)."""
+    """Cell indices in the cell-Gemeinde bridge, ascending."""
     cells = np.array(
         [
             row[0]
             for row in connection.execute(
                 """
-                SELECT cell_index FROM normalized.de_icon_cell
+                SELECT DISTINCT cell_index
+                FROM normalized.de_icon_cell_gemeinde_bridge
                 WHERE geography_version = %s AND source_grid_id = %s
                 ORDER BY cell_index
                 """,
@@ -61,7 +62,7 @@ def load_cell_indices(
     )
     if cells.size == 0:
         raise RuntimeError(
-            "Germany grid subset is empty; materialize "
+            "Cell-Gemeinde bridge is empty; materialize "
             "normalized/de_icon_gemeinde_bridge first"
         )
     return cells

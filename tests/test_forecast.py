@@ -63,8 +63,8 @@ def test_partition_aggregation_and_retention_keeps_two_runs() -> None:
                 )
             for cell in (1, 2, 3):
                 connection.execute(
-                    "INSERT INTO normalized.de_icon_cell VALUES (%s,%s,%s,%s,1e6)",
-                    (FIXTURE, GRID, cell, _square(x + 500 * (cell - 1), y)),
+                    "INSERT INTO normalized.icon_cell VALUES (%s,%s,%s,1e6)",
+                    (GRID, cell, _square(x + 500 * (cell - 1), y)),
                 )
             for cell, ars, fraction in bridge_rows:
                 connection.execute(

@@ -90,7 +90,7 @@ def icon_cell_geometry_quality(
         description=(
             "PostgreSQL validates ICON grid cardinality, "
             "three-vertex topology, geometry validity, "
-            "quarantine state, and EPSG:25833."
+            "quarantine state, and EPSG:3035."
         ),
     )
 

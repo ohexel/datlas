@@ -3,22 +3,11 @@
 -- de_-prefixed objects; Berlin objects are read, never written.
 
 -- ---------------------------------------------------------------------------
--- Germany grid subset: ICON cells intersecting any Gemeinde, in EPSG:3035,
--- transformed from the Berlin pipeline's cell polygons (EPSG:25833,
--- read-only). Area weights are computed in EPSG:3035 (ADR 014).
+-- Cell-Gemeinde bridge: the area of every ICON cell (normalized.icon_cell,
+-- EPSG:3035) inside every Gemeinde, as a fraction of the Gemeinde. The cells
+-- of a forecast are the cells in the bridge. Area weights are computed in
+-- EPSG:3035 (ADR 014).
 -- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS normalized.de_icon_cell (
-    geography_version text NOT NULL,
-    source_grid_id text NOT NULL,
-    cell_index integer NOT NULL,
-    geometry public.geometry(Polygon, 3035) NOT NULL,
-    cell_area_m2 double precision NOT NULL CHECK (cell_area_m2 > 0),
-    PRIMARY KEY (geography_version, source_grid_id, cell_index)
-);
-
-CREATE INDEX IF NOT EXISTS de_icon_cell_geometry_idx
-    ON normalized.de_icon_cell USING gist (geometry);
-
 CREATE TABLE IF NOT EXISTS normalized.de_icon_cell_gemeinde_bridge (
     geography_version text NOT NULL,
     source_grid_id text NOT NULL,
@@ -32,14 +21,12 @@ CREATE TABLE IF NOT EXISTS normalized.de_icon_cell_gemeinde_bridge (
     PRIMARY KEY (geography_version, source_grid_id, ars, cell_index),
     FOREIGN KEY (geography_version, ars)
         REFERENCES normalized.de_gemeinde (geography_version, ars),
-    FOREIGN KEY (geography_version, source_grid_id, cell_index)
-        REFERENCES normalized.de_icon_cell (
-            geography_version, source_grid_id, cell_index
-        )
+    FOREIGN KEY (source_grid_id, cell_index)
+        REFERENCES normalized.icon_cell (source_grid_id, cell_index)
 );
 
--- Supports the foreign key to de_icon_cell: without it, deleting the cells of
--- a geography version (refresh_de_icon_bridge) scans the bridge once per cell.
+-- Lists the cells of a geography version and grid (load_cell_indices) and
+-- supports the foreign key to icon_cell.
 CREATE INDEX IF NOT EXISTS de_icon_cell_gemeinde_bridge_cell_idx
     ON normalized.de_icon_cell_gemeinde_bridge (
         geography_version, source_grid_id, cell_index
@@ -101,33 +88,6 @@ BEGIN
     DELETE FROM normalized.de_icon_cell_gemeinde_bridge AS b
     WHERE b.geography_version = p_geography_version
       AND b.source_grid_id = p_source_grid_id;
-    DELETE FROM normalized.de_icon_cell AS c
-    WHERE c.geography_version = p_geography_version
-      AND c.source_grid_id = p_source_grid_id;
-
-    -- Germany cells: the Berlin pipeline's ICON cell polygons (read-only,
-    -- EPSG:25833) transformed to EPSG:3035, kept where they intersect a Gemeinde.
-    INSERT INTO normalized.de_icon_cell
-    WITH cells AS (
-        SELECT
-            icon.cell_index,
-            public.ST_Transform(icon.geometry, 3035) AS geometry
-        FROM normalized.icon_cell AS icon
-        WHERE icon.source_grid_id = p_source_grid_id
-    )
-    SELECT
-        p_geography_version,
-        p_source_grid_id,
-        cells.cell_index,
-        public.ST_Normalize(cells.geometry)::public.geometry(Polygon, 3035),
-        public.ST_Area(cells.geometry)
-    FROM cells
-    WHERE EXISTS (
-        SELECT 1
-        FROM normalized.de_gemeinde AS g
-        WHERE g.geography_version = p_geography_version
-          AND public.ST_Intersects(g.geometry, cells.geometry)
-    );
 
     INSERT INTO normalized.de_icon_cell_gemeinde_bridge
     SELECT
@@ -145,20 +105,20 @@ BEGIN
             g.area_m2 AS gemeinde_area_m2,
             public.ST_Area(public.ST_Intersection(g.geometry, c.geometry))
                 AS intersection_area_m2
-        FROM normalized.de_icon_cell AS c
-        JOIN normalized.de_gemeinde AS g
-          ON g.geography_version = c.geography_version
+        FROM normalized.de_gemeinde AS g
+        JOIN normalized.icon_cell AS c
+          ON c.source_grid_id = p_source_grid_id
          AND public.ST_Intersects(g.geometry, c.geometry)
-        WHERE c.geography_version = p_geography_version
-          AND c.source_grid_id = p_source_grid_id
+        WHERE g.geography_version = p_geography_version
     ) AS pieces
     WHERE pieces.intersection_area_m2 > 0;
 
     RETURN QUERY
     SELECT
-        (SELECT COUNT(*) FROM normalized.de_icon_cell AS c
-         WHERE c.geography_version = p_geography_version
-           AND c.source_grid_id = p_source_grid_id),
+        (SELECT COUNT(DISTINCT b.cell_index)
+         FROM normalized.de_icon_cell_gemeinde_bridge AS b
+         WHERE b.geography_version = p_geography_version
+           AND b.source_grid_id = p_source_grid_id),
         (SELECT COUNT(*) FROM normalized.de_icon_cell_gemeinde_bridge AS b
          WHERE b.geography_version = p_geography_version
            AND b.source_grid_id = p_source_grid_id),

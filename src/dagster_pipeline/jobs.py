@@ -21,19 +21,22 @@ from src.dagster_pipeline.assets.forecast import (
 )
 from src.dagster_pipeline.assets.normalized import GERMANY_NORMALIZED_ASSETS
 from src.dagster_pipeline.assets.raw import GERMANY_RAW_ASSETS
+from src.dagster_pipeline.assets.database_spatial import SPATIAL_ASSETS
 from src.dagster_pipeline.assets.icon_d2_ruc import RAW_ICON_D2_RUC_ASSETS
 
 
 GERMANY_STATIC_JOB = dg.define_asset_job(
     name="germany_static",
     selection=dg.AssetSelection.assets(
+        *SPATIAL_ASSETS,
         *GERMANY_RAW_ASSETS,
         *GERMANY_NORMALIZED_ASSETS,
         normalized_de_icon_gemeinde_bridge,
     ),
     description=(
-        "Acquire and load VG250 and Zensus 2022, build the normalized "
-        "hierarchy, population and the Germany cell-Gemeinde bridge."
+        "Load the ICON grid and build its cells; acquire and load VG250 and "
+        "Zensus 2022; build the normalized hierarchy, population and the "
+        "cell-Gemeinde bridge."
     ),
 )
 

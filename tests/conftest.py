@@ -11,7 +11,7 @@ import pytest
 DATABASE_TEST_FILES = {
     "test_apparent_temperature_sql.py",
     "test_database_boundary.py",
-    "test_spatial_sql_normalization.py",
+    "test_icon_cell_sql.py",
 }
 
 CONTRACT_TEST_FILES = {

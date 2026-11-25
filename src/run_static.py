@@ -1,6 +1,6 @@
-"""Build the static Germany inputs once: VG250 and Zensus 2022 raw loads,
-the normalized hierarchy and population, the Germany grid subset and the
-cell-Gemeinde bridge, with checks 1-4.
+"""Build the static inputs once: the ICON grid and its cells, the VG250 and
+Zensus 2022 raw loads, the normalized hierarchy and population and the
+cell-Gemeinde bridge, with the grid check and checks 1-4.
 
 Usage:
     uv run --env-file .env python -m src.run_static

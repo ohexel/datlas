@@ -1,12 +1,14 @@
 import pytest
 
 from src.database.connection import database_connection
+from src.database.schema import apply_base_schema
 
 
 def test_apparent_temperature_shade_formula_fixture() -> None:
     with database_connection(
         application_name="datlas_apparent_temperature_formula_test"
     ) as connection:
+        apply_base_schema(connection)
         result = connection.execute(
             """
             SELECT normalized.calculate_apparent_temperature_shade_c(

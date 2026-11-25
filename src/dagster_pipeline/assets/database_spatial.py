@@ -1,6 +1,7 @@
 import dagster as dg
 
 from src.database.connection import database_connection
+from src.database.schema import apply_base_schema
 from src.icon_grid_contract import (
     ICON_D2_GRID_CONTRACT,
 )
@@ -64,7 +65,7 @@ def raw_icon_grid(
     deps=[RAW_ICON_GRID_KEY],
     group_name="normalized",
     description=(
-        "Canonical ICON triangular cell geometry "
+        "Every ICON grid cell as a triangle in EPSG:3035, "
         "constructed and validated by PostGIS."
     ),
 )
@@ -74,6 +75,7 @@ def normalized_icon_cell(
     with database_connection(
         application_name="datlas_icon_cell_normalize"
     ) as connection:
+        apply_base_schema(connection)
         summary = connection.execute(
             """
             SELECT
@@ -120,7 +122,7 @@ def normalized_icon_cell(
             "rejection_reasons": (
                 summary[4]
             ),
-            "target_srid": 25833,
+            "target_srid": 3035,
         }
     )
 

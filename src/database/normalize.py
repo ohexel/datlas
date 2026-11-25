@@ -7,7 +7,7 @@ from psycopg import Connection
 
 from src.database.connection import database_connection
 from src.ingestion.contract import GEOGRAPHY_VERSION, VG250_CONTRACT, ZENSUS_CONTRACT
-from src.ingestion.static_raw_load import apply_germany_schema
+from src.ingestion.static_raw_load import apply_raw_schema
 
 
 NORMALIZED_SCHEMA_PATH = (
@@ -20,7 +20,7 @@ def zensus_source_sha256s() -> list[str]:
 
 
 def apply_normalized_schema(connection: Connection) -> None:
-    apply_germany_schema(connection)
+    apply_raw_schema(connection)
     connection.execute(NORMALIZED_SCHEMA_PATH.read_text(encoding="utf-8"))
 
 
