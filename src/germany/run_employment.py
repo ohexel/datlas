@@ -15,7 +15,7 @@ from datetime import date
 from pathlib import Path
 from time import perf_counter
 
-from src.bootstrap import ensure_dagster_home
+from src.dagster_home import ensure_dagster_home
 from src.dagster_pipeline.germany_jobs import employment_run_config
 from src.germany.contract import BA_GEMEINDEDATEN_CONTRACT
 from src.germany.run_forecast import execute_job

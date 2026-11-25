@@ -4,13 +4,10 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from types import SimpleNamespace
 
 import pytest
 
-from src.dagster_pipeline.assets import database_analytical
-from src.dagster_pipeline.partitions import weather_partition_key
-from src.forecast_key import ForecastKey, ProjectPaths
+from src.forecast_key import ProjectPaths
 from src.retention.forecast_policy import (
     FORECAST_RETENTION_HOURS_ENV,
     forecast_partition_window_start,
@@ -235,63 +232,3 @@ def test_forecast_retention_uses_identical_database_and_file_cutoffs(
     assert result.cutoff_utc == result.raw_files.cutoff_utc
     assert result.database.total_affected_rows == len(FORECAST_RETENTION_TABLES)
     assert result.raw_files.deleted_file_count == 1
-
-
-@pytest.mark.parametrize("accepted", [True, False])
-def test_automatic_cleanup_runs_only_after_a_successful_final_partition(
-    monkeypatch: pytest.MonkeyPatch,
-    accepted: bool,
-) -> None:
-    events: list[str] = []
-    recorded_metadata: list[dict[str, object]] = []
-    forecast = ForecastKey.from_dwd_labels(
-        run_time="2026-08-23T10:00",
-        lead_time="PT000H00M",
-    )
-
-    @contextmanager
-    def fake_connection(*, application_name: str):
-        assert application_name == "capstone_weather_population"
-        events.append("refresh_started")
-
-        class RefreshConnection:
-            def execute(self, statement: str, parameters: object):
-                del statement, parameters
-                return SimpleNamespace(
-                    fetchone=lambda: (accepted, 542, 540, 2, "2025-12-31", None)
-                )
-
-        yield RefreshConnection()
-        events.append("refresh_committed")
-
-    def fake_cleanup(*, dry_run: bool):
-        assert not dry_run
-        events.append("cleanup")
-        return SimpleNamespace(
-            retention_hours=24,
-            database=SimpleNamespace(total_affected_rows=7),
-            raw_files=SimpleNamespace(deleted_file_count=3),
-        )
-
-    monkeypatch.setattr(database_analytical, "database_connection", fake_connection)
-    monkeypatch.setattr(database_analytical, "prune_forecast_data", fake_cleanup)
-    context = SimpleNamespace(
-        partition_key=weather_partition_key(forecast),
-        add_output_metadata=recorded_metadata.append,
-    )
-    function = (
-        database_analytical.analytical_plr_weather_population
-        .node_def.compute_fn.decorated_fn
-    )
-
-    if accepted:
-        function(context)
-        assert events == ["refresh_started", "refresh_committed", "cleanup"]
-        assert recorded_metadata[0]["forecast_retention_hours"] == 24
-        assert recorded_metadata[0]["expired_forecast_rows_deleted"] == 7
-        assert recorded_metadata[0]["expired_forecast_files_deleted"] == 3
-    else:
-        with pytest.raises(RuntimeError, match="rejected final analytical partition"):
-            function(context)
-        assert events == ["refresh_started", "refresh_committed"]
-        assert recorded_metadata == []

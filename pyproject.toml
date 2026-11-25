@@ -26,11 +26,10 @@ code_location_target_module = "src.dagster_pipeline.definitions"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-m", "not integration and not acceptance and not historical_rebuild"]
+addopts = ["-m", "not integration and not acceptance"]
 markers = [
     "integration: requires an initialized PostgreSQL/PostGIS database",
-    "acceptance: requires fully materialized static inputs and HOSTRADA references",
-    "historical_rebuild: exercises the optional HOSTRADA reconstruction workflow",
+    "acceptance: requires the fully installed Germany data",
     "contract: protects an important pipeline, data, or serving contract",
 ]
 

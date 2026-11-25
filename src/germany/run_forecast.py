@@ -19,7 +19,7 @@ from time import perf_counter
 
 import dagster as dg
 
-from src.bootstrap import ensure_dagster_home
+from src.dagster_home import ensure_dagster_home
 from src.database.connection import database_connection
 from src.dagster_pipeline.partitions import WEATHER_LEAD_TIMES, weather_partition_key
 from src.germany.contract import GEOGRAPHY_VERSION

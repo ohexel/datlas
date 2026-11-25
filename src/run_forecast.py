@@ -9,7 +9,7 @@ from typing import Callable
 import dagster as dg
 import requests
 
-from src.bootstrap import ensure_dagster_home
+from src.dagster_home import ensure_dagster_home
 from src.dagster_pipeline.partitions import (
     WEATHER_LEAD_TIMES,
     weather_partition_key,

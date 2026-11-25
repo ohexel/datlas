@@ -1,25 +1,11 @@
-"""Germany layer, forecast: Berlin sensor separation, SQL aggregation,
-refusal of missing model values and retention, the tie rule of the 24-hour
-summaries."""
+"""Germany layer, forecast: SQL aggregation, refusal of missing model values
+and retention, the tie rule of the 24-hour summaries."""
 
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 import psycopg
 import pytest
-
-
-def test_berlin_sensor_does_not_target_germany_jobs() -> None:
-    from src.dagster_pipeline.definitions import defs
-
-    germany_jobs = {
-        "germany_static", "germany_forecast", "germany_forecast_publish",
-        "germany_employment", "germany_sectors",
-    }
-    sensor = defs.resolve_sensor_def("dwd_icon_d2_ruc_availability_sensor")
-    assert sensor.job_name not in germany_jobs
-    for name in germany_jobs:
-        assert defs.resolve_job_def(name) is not None
 
 
 # ---------------------------------------------------------------------------

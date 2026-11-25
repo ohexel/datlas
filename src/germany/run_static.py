@@ -15,7 +15,7 @@ import logging
 from pathlib import Path
 from time import perf_counter
 
-from src.bootstrap import ensure_dagster_home
+from src.dagster_home import ensure_dagster_home
 from src.germany.run_forecast import execute_job
 
 
