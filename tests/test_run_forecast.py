@@ -1,4 +1,4 @@
-"""Protect the public manual-forecast interface and source availability gate."""
+"""Protect the manual forecast runner's interface and source availability gate."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -116,17 +116,17 @@ def test_only_missing_retained_fields_require_upstream_availability(
 
 def test_invalid_run_label_fails_before_contacting_dwd() -> None:
     with pytest.raises(ValueError, match="YYYYMMDDTHHMM in UTC"):
-        run_forecast("2026-08-24 16:00", "PT000H00M")
+        run_forecast("2026-08-24 16:00")
 
 
 def test_expired_run_fails_before_contacting_dwd() -> None:
     with pytest.raises(ForecastUnavailableError, match="outside the configured 24-hour"):
-        run_forecast("19950101T0000", "PT000H00M")
+        run_forecast("19950101T0000")
 
 
 def test_future_run_explains_utc_without_contacting_dwd() -> None:
     with pytest.raises(ForecastUnavailableError, match="UTC, not Berlin-local"):
-        run_forecast("29990101T0000", "PT000H00M")
+        run_forecast("29990101T0000")
 
 
 def test_manual_forecast_error_is_concise_and_traceback_free(

@@ -13,7 +13,7 @@ Two kinds of data are written to <output>/data/:
   keyed by regional code and joined client-side.
 
 The serving web host must answer HTTP Range requests (PMTiles); the local
-preview (src/germany/preview_server.py) does.
+preview (src/preview_server.py) does.
 """
 
 import argparse
@@ -30,8 +30,8 @@ import tempfile
 import psycopg
 
 from src.database.connection import database_connection
-from src.germany.contract import GEOGRAPHY_VERSION, VG250_CONTRACT
-from src.germany.preview_server import serve_dashboard
+from src.ingestion.contract import GEOGRAPHY_VERSION, VG250_CONTRACT
+from src.preview_server import serve_dashboard
 
 
 LOGGER = logging.getLogger(__name__)
@@ -237,7 +237,7 @@ def collect_values(connection: psycopg.Connection) -> dict[str, object]:
         "SELECT geography_version, run_time_utc FROM analytical.de_current_run"
     ).fetchone()
     if current is None:
-        raise RuntimeError("No complete Germany forecast run; run src.germany.run_forecast")
+        raise RuntimeError("No complete Germany forecast run; run src.run_forecast")
     geography_version, run_time = current
 
     leads = connection.execute(LEADS_QUERY).fetchall()
@@ -580,7 +580,7 @@ def export_germany_dashboard(
     write_json_atomic(data_dir / "values.json", values)
     if employment is None:
         # The page then offers the temperature theme only.
-        result["employment"] = "not loaded (python -m src.germany.run_employment)"
+        result["employment"] = "not loaded (python -m src.run_employment)"
     else:
         write_json_atomic(data_dir / "employment.json", employment)
         result["employment"] = {
@@ -588,7 +588,7 @@ def export_germany_dashboard(
             "bytes": (data_dir / "employment.json").stat().st_size,
         }
     if sectors is None:
-        result["sectors"] = "not loaded (python -m src.germany.run_sectors)"
+        result["sectors"] = "not loaded (python -m src.run_sectors)"
     else:
         write_json_atomic(data_dir / "sectors.json", sectors)
         result["sectors"] = {

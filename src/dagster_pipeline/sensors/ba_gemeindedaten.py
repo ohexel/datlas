@@ -17,10 +17,10 @@ import psycopg
 import requests
 
 from src.database.connection import database_connection
-from src.dagster_pipeline.germany_jobs import GERMANY_EMPLOYMENT_JOB, employment_run_config
-from src.germany.ba_gemeindedaten import next_reference_date, vintage_is_published
-from src.germany.contract import BA_GEMEINDEDATEN_CONTRACT
-from src.germany.indicators import latest_loaded_reference_date
+from src.dagster_pipeline.jobs import GERMANY_EMPLOYMENT_JOB, employment_run_config
+from src.ingestion.ba_gemeindedaten import next_reference_date, vintage_is_published
+from src.ingestion.contract import BA_GEMEINDEDATEN_CONTRACT
+from src.database.indicators import latest_loaded_reference_date
 
 
 SENSOR_MINIMUM_INTERVAL_SECONDS = 24 * 60 * 60

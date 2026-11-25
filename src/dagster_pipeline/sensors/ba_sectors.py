@@ -16,9 +16,9 @@ import psycopg
 import requests
 
 from src.database.connection import database_connection
-from src.dagster_pipeline.germany_jobs import GERMANY_SECTORS_JOB, sector_run_config
-from src.germany.ba_sectors import BaRateLimited, PoliteClient, cooldown_until, next_quarter
-from src.germany.contract import (
+from src.dagster_pipeline.jobs import GERMANY_SECTORS_JOB, sector_run_config
+from src.ingestion.ba_sectors import BaRateLimited, PoliteClient, cooldown_until, next_quarter
+from src.ingestion.contract import (
     BA_REGIONALREPORT_CONTRACT,
     BA_WZ_HEFT_CONTRACT,
     SECTOR_LATEST_KNOWN,
