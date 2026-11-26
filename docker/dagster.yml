@@ -7,7 +7,7 @@ services:
       dockerfile: docker/dagster.dockerfile
     restart: unless-stopped
     init: true
-    user: "${DAGSTER_UID:-1000}:${DAGSTER_GID:-1000}"
+    user: "${DAGSTER_UID:-1001}:${DAGSTER_GID:-1001}"
     working_dir: /app
     environment:
       POSTGRES_HOST: postgres
