@@ -1,5 +1,5 @@
 # datlas
-Öffentliche Daten in Karteform
+Öffentliche Daten in Kartenform
 
 # Germany by region: temperature forecast, employment and industry
 
