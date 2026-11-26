@@ -10,6 +10,8 @@ from netCDF4 import Dataset
 
 from src.database.connection import database_connection
 from src.database.load import copy_rows
+from src.database.schema import apply_base_schema
+from src.download_icon_d2_grid import ensure_grid_file
 from src.icon_grid_contract import (
     ICON_D2_GRID_CONTRACT,
 )
@@ -191,7 +193,7 @@ def load_icon_grid_raw(
     source_path: Path | None = None,
 ) -> IconGridLoadResult:
     if source_path is None:
-        source_path = ICON_D2_GRID_CONTRACT.source_path
+        source_path = ensure_grid_file()
     if not source_path.exists():
         raise FileNotFoundError(
             f"ICON grid source not found: {source_path}"
@@ -227,8 +229,9 @@ def load_icon_grid_raw(
         )
 
     with database_connection(
-        application_name="capstone_icon_grid_load"
+        application_name="datlas_icon_grid_load"
     ) as connection:
+        apply_base_schema(connection)
         # Deleting the grid source cascades through vertices
         # and topology. PostgreSQL owns dependent-row cleanup.
         connection.execute(

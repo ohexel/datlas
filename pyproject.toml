@@ -1,7 +1,7 @@
 [project]
-name = "capstone"
+name = "datlas"
 version = "0.1.0"
-description = "Reproducible Berlin neighborhood temperature and historical-context pipeline"
+description = "Public data for German regions on a map: temperature forecast, employment and industry"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -26,11 +26,10 @@ code_location_target_module = "src.dagster_pipeline.definitions"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = ["-m", "not integration and not acceptance and not historical_rebuild"]
+addopts = ["-m", "not integration and not acceptance"]
 markers = [
     "integration: requires an initialized PostgreSQL/PostGIS database",
-    "acceptance: requires fully materialized static inputs and HOSTRADA references",
-    "historical_rebuild: exercises the optional HOSTRADA reconstruction workflow",
+    "acceptance: requires the fully installed Germany data",
     "contract: protects an important pipeline, data, or serving contract",
 ]
 
@@ -46,4 +45,4 @@ select = ["TID251"]
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
 "__future__.annotations".msg = """Do not use `from __future__ import annotations`: Dagster reads \
-annotations at runtime (see docs/runbook.md), and Python 3.11+ supports the syntax natively."""
+annotations at runtime (see docs/testing.md), and Python 3.11+ supports the syntax natively."""

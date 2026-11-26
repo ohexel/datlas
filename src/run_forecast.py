@@ -1,15 +1,28 @@
-"""Manually materialize one forecast partition without waiting for the sensor."""
+"""Run one complete 25-point forecast (lead hours 0-24) without the sensor.
+
+Usage:
+    uv run --env-file .env python -m src.run_forecast \\
+        --run-time "$(date -u -d '3 hours ago' +%Y%m%dT%H00)"
+
+Each lead time is one Dagster partition of the `forecast` job
+(the four raw DWD fields plus the aggregation to Gemeinden). Partitions
+already complete for every Gemeinde are skipped. Afterwards the
+`forecast_publish` job publishes the run, applies retention and
+runs checks 5-6.
+"""
 
 import argparse
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 from typing import Callable
 
-import dagster as dg
 import requests
 
-from src.bootstrap import ensure_dagster_home
+from src.dagster_home import ensure_dagster_home, execute_job
+from src.database.forecast import partition_complete
 from src.dagster_pipeline.partitions import (
     WEATHER_LEAD_TIMES,
     weather_partition_key,
@@ -31,6 +44,7 @@ from src.retention.forecast_policy import (
 )
 
 
+LOGGER = logging.getLogger(__name__)
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -126,50 +140,64 @@ def parse_forecast_request(
 
 def run_forecast(
     run_time_label: str,
-    lead_time_label: str,
     *,
     project_root: Path = PROJECT_ROOT,
-) -> dict[str, str]:
-    forecast = parse_forecast_request(run_time_label, lead_time_label)
-    ensure_forecast_sources_available(forecast, project_root=project_root)
-    partition_key = weather_partition_key(forecast)
+) -> dict[str, object]:
+    # Validate the label before touching PostgreSQL, Dagster or DWD.
+    run_time_utc = parse_forecast_request(run_time_label, WEATHER_LEAD_TIMES[0]).run_time
     ensure_dagster_home(project_root)
+    materialized: list[str] = []
+    skipped: list[str] = []
+    started = perf_counter()
 
-    from src.dagster_pipeline.definitions import defs
-
-    instance = dg.DagsterInstance.get()
-    try:
-        result = defs.get_job_def(
-            "icon_d2_ruc_forecast"
-        ).execute_in_process(
-            partition_key=partition_key,
-            instance=instance,
-            raise_on_error=False,
+    for index, lead_time in enumerate(WEATHER_LEAD_TIMES, start=1):
+        forecast = parse_forecast_request(run_time_label, lead_time)
+        if partition_complete(forecast):
+            skipped.append(lead_time)
+            LOGGER.info("[%02d/25] %s already complete; skipping", index, lead_time)
+            continue
+        ensure_forecast_sources_available(forecast, project_root=project_root)
+        LOGGER.info("[%02d/25] Materializing lead %s", index, lead_time)
+        result = execute_job(
+            "forecast",
+            partition_key=weather_partition_key(forecast),
         )
-    finally:
-        instance.dispose()
+        if not result.success:
+            raise RuntimeError(
+                f"Partition {lead_time} failed; inspect Dagster run {result.run_id}"
+            )
+        materialized.append(lead_time)
 
-    if not result.success:
-        raise RuntimeError(
-            "Forecast materialization failed; inspect Dagster run "
-            f"{result.run_id}."
-        )
+    partitions_seconds = perf_counter() - started
+    publish_started = perf_counter()
+    publish = execute_job("forecast_publish")
+    if not publish.success:
+        raise RuntimeError(f"Publishing failed; inspect Dagster run {publish.run_id}")
+    checks = {
+        evaluation.check_name: {
+            "passed": evaluation.passed,
+            "severity": evaluation.severity.value,
+        }
+        for evaluation in publish.get_asset_check_evaluations()
+    }
 
     return {
-        "run_id": result.run_id,
-        "run_time_utc": forecast.run_time.isoformat(),
-        "lead_time": forecast.lead_time_label,
-        "valid_time_utc": forecast.valid_time.isoformat(),
-        "serving_view": "analytical.current_plr_weather_context",
+        "status": "ready",
+        "run_time_utc": run_time_utc.isoformat(),
+        "materialized_lead_times": len(materialized),
+        "already_complete_lead_times": len(skipped),
+        "partitions_wall_seconds": round(partitions_seconds, 1),
+        "publish_wall_seconds": round(perf_counter() - publish_started, 1),
+        "checks": checks,
     }
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
-            "Run one forecast partition directly without starting the sensor. "
-            "Recent runs may not yet be published; older runs may no longer "
-            "be available from DWD."
+            "Run one complete forecast (lead hours 0-24) directly without "
+            "starting the sensor. Recent runs may not yet be published; older "
+            "runs may no longer be available from DWD."
         )
     )
     parser.add_argument(
@@ -180,18 +208,17 @@ def main(argv: list[str] | None = None) -> int:
             "for example 20260824T1600."
         ),
     )
-    parser.add_argument(
-        "--lead-time",
-        default="PT000H00M",
-        choices=WEATHER_LEAD_TIMES,
-    )
     arguments = parser.parse_args(argv)
+    logging.basicConfig(
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+        level=logging.INFO,
+    )
     try:
-        result = run_forecast(arguments.run_time, arguments.lead_time)
+        result = run_forecast(arguments.run_time)
     except (ValueError, RuntimeError, requests.RequestException) as exc:
         parser.exit(status=1, message=f"error: {exc}\n")
 
-    print(json.dumps(result, indent=2, sort_keys=True))
+    print(json.dumps(result, indent=2))
     return 0
 
 

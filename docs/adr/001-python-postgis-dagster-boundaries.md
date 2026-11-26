@@ -1,6 +1,6 @@
 # ADR 001: Python, PostGIS, and Dagster have distinct responsibilities
 
-Status: Accepted.
+Status: Accepted in the capstone; still holds for datlas (ADR 021). Its examples refer to the Berlin capstone.
 
 ## Context
 

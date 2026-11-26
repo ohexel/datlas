@@ -6,11 +6,6 @@ from src.forecast_key import (
     ForecastKey,
     parse_lead_time,
 )
-from src.hostrada_contract import (
-    HOSTRADA_MONTH_FORMAT,
-    HostradaMonthKey,
-)
-from src.hostrada_reference import HOSTRADA_REFERENCE_CALENDAR_MONTHS
 from src.retention.forecast_policy import forecast_partition_window_start
 
 
@@ -49,25 +44,6 @@ WEATHER_PARTITIONS = dg.MultiPartitionsDefinition(
 )
 
 
-# Source files are UTC calendar months. Leave the end open so diagnostic
-# months outside the eventual 1995-2025 reference period remain materializable.
-HOSTRADA_MONTHLY_PARTITIONS = dg.MonthlyPartitionsDefinition(
-    start_date=datetime(1995, 1, 1, tzinfo=timezone.utc),
-    timezone="UTC",
-    fmt=HOSTRADA_MONTH_FORMAT,
-)
-
-
-# Reference partitions represent recurring Berlin-local calendar months.
-HOSTRADA_REFERENCE_PARTITIONS = dg.StaticPartitionsDefinition(
-    HOSTRADA_REFERENCE_CALENDAR_MONTHS,
-)
-
-
-def hostrada_month_from_partition(partition_key: str) -> HostradaMonthKey:
-    return HostradaMonthKey.from_partition_key(partition_key)
-
-
 def weather_partition_key(
     forecast: ForecastKey,
 ) -> dg.MultiPartitionKey:
@@ -75,8 +51,8 @@ def weather_partition_key(
     Convert the domain ForecastKey into Dagster's two-dimensional
     partition key.
 
-    This helper is intended to be reused by the future DWD sensor so
-    sensor logic does not construct Dagster partition strings manually.
+    Sensors and runners use this helper instead of constructing Dagster
+    partition strings manually.
     """
     return dg.MultiPartitionKey(
         {

@@ -1,4 +1,5 @@
-"""Protect the public manual-forecast interface and source availability gate."""
+"""The command-line runners: the forecast runner's interface and source
+availability gate, and help that never starts a job."""
 
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,9 @@ from src.run_forecast import (
     main,
     run_forecast,
 )
+
+
+pytestmark = pytest.mark.contract
 
 
 @dataclass
@@ -116,17 +120,17 @@ def test_only_missing_retained_fields_require_upstream_availability(
 
 def test_invalid_run_label_fails_before_contacting_dwd() -> None:
     with pytest.raises(ValueError, match="YYYYMMDDTHHMM in UTC"):
-        run_forecast("2026-08-24 16:00", "PT000H00M")
+        run_forecast("2026-08-24 16:00")
 
 
 def test_expired_run_fails_before_contacting_dwd() -> None:
     with pytest.raises(ForecastUnavailableError, match="outside the configured 24-hour"):
-        run_forecast("19950101T0000", "PT000H00M")
+        run_forecast("19950101T0000")
 
 
 def test_future_run_explains_utc_without_contacting_dwd() -> None:
     with pytest.raises(ForecastUnavailableError, match="UTC, not Berlin-local"):
-        run_forecast("29990101T0000", "PT000H00M")
+        run_forecast("29990101T0000")
 
 
 def test_manual_forecast_error_is_concise_and_traceback_free(
@@ -148,14 +152,18 @@ def test_manual_forecast_error_is_concise_and_traceback_free(
     assert "Traceback" not in error
 
 
-def test_manual_forecast_help_explains_utc_and_publication_window(
+def test_run_static_help_does_not_start_the_job(
+    monkeypatch: pytest.MonkeyPatch,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
+    from src import run_static
+
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise AssertionError("--help started the static job")
+
+    monkeypatch.setattr(run_static, "run_static", forbidden)
     with pytest.raises(SystemExit) as observed:
-        main(["--help"])
+        run_static.main(["--help"])
 
     assert observed.value.code == 0
-    output = " ".join(capsys.readouterr().out.split())
-    assert "UTC, not Berlin-local time" in output
-    assert "Recent runs may not yet be published" in output
-    assert "older runs may no longer be available" in output
+    assert "Build the static inputs once" in capsys.readouterr().out

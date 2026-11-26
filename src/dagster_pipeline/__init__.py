@@ -1,1 +1,1 @@
-"""Dagster orchestration for the capstone data pipeline."""
+"""Dagster orchestration for the datlas pipeline."""

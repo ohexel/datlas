@@ -1,3 +1,5 @@
+name: ${COMPOSE_PROJECT_NAME:-datlas}
+
 services:
   dagster:
     build:
@@ -5,7 +7,7 @@ services:
       dockerfile: docker/dagster.dockerfile
     restart: unless-stopped
     init: true
-    user: "${DAGSTER_UID:-1000}:${DAGSTER_GID:-1000}"
+    user: "${DAGSTER_UID:-1001}:${DAGSTER_GID:-1001}"
     working_dir: /app
     environment:
       POSTGRES_HOST: postgres
@@ -13,13 +15,14 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      WEATHER_MASK_BUFFER_M: ${WEATHER_MASK_BUFFER_M:-5000}
-      WEATHER_RAW_PINNED_PARTITIONS: ${WEATHER_RAW_PINNED_PARTITIONS:-}
+      FORECAST_RETENTION_HOURS: ${FORECAST_RETENTION_HOURS:-24}
+      # Needed only while the Zensus files are not under data/raw/germany/.
+      ZENSUS2022_TOKEN: ${ZENSUS2022_TOKEN:-}
       DAGSTER_HOME: /app/.dagster_home
       PYTHONPATH: /app
       HOME: /tmp
     ports:
-      - "127.0.0.1:${DAGSTER_PORT:-3000}:3000"
+      - "127.0.0.1:${DAGSTER_PORT:-3001}:3000"
     volumes:
       - ..:/app
       - ./dagster-container.env:/app/.env:ro

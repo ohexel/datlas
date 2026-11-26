@@ -1,6 +1,6 @@
 # ADR 008: Initialize from one canonical schema and restart safely
 
-Status: Accepted.
+Status: Superseded by [ADR 021](021-separation-from-the-capstone.md): `sql/base_schema.sql`, applied before every other schema file, replaces the bootstrap schema.
 
 ## Context
 

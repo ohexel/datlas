@@ -1,187 +1,63 @@
 import dagster as dg
 
-from src.dagster_pipeline.assets.dashboard_export import (
-    DASHBOARD_EXPORT_ASSETS,
+from src.dagster_pipeline.assets.dashboard import DASHBOARD_ASSETS
+from src.dagster_pipeline.assets.database_spatial import SPATIAL_ASSETS
+from src.dagster_pipeline.assets.employment import (
+    EMPLOYMENT_ASSETS,
 )
-from src.dagster_pipeline.assets.database_analytical import (
-    ANALYTICAL_ASSETS,
+from src.dagster_pipeline.assets.forecast import (
+    FORECAST_ASSETS,
 )
-from src.dagster_pipeline.assets.historical_trajectories import (
-    HISTORICAL_TRAJECTORIES_ASSETS,
+from src.dagster_pipeline.assets.normalized import (
+    NORMALIZED_ASSETS,
 )
-from src.dagster_pipeline.assets.database_bridge import (
-    BRIDGE_ASSETS,
+from src.dagster_pipeline.assets.raw import RAW_ASSETS
+from src.dagster_pipeline.assets.sectors import SECTOR_ASSETS
+from src.dagster_pipeline.assets.icon_d2_ruc import RAW_ICON_D2_RUC_ASSETS
+from src.dagster_pipeline.checks.database_spatial import SPATIAL_CHECKS
+from src.dagster_pipeline.checks.employment import (
+    EMPLOYMENT_CHECKS,
 )
-from src.dagster_pipeline.assets.database_hostrada_monthly import (
-    HOSTRADA_MONTHLY_ASSETS,
+from src.dagster_pipeline.checks.forecast import (
+    FORECAST_CHECKS,
 )
-from src.dagster_pipeline.assets.database_hostrada_reference import (
-    HOSTRADA_REFERENCE_ASSETS,
+from src.dagster_pipeline.checks.normalized import (
+    NORMALIZED_CHECKS,
 )
-from src.dagster_pipeline.assets.database_hostrada_spatial import (
-    HOSTRADA_SPATIAL_ASSETS,
-)
-from src.dagster_pipeline.assets.database_population import (
-    POPULATION_ASSETS,
-)
-from src.dagster_pipeline.assets.database_spatial import (
-    SPATIAL_ASSETS,
-)
-from src.dagster_pipeline.assets.database_weather_mask import (
-    WEATHER_MASK_ASSETS,
-)
-from src.dagster_pipeline.assets.database_weather_normalized import (
-    WEATHER_NORMALIZED_ASSETS,
-)
-from src.dagster_pipeline.assets.database_weather_raw import (
-    WEATHER_RAW_ASSETS,
-)
-from src.dagster_pipeline.assets.germany_employment import (
-    GERMANY_EMPLOYMENT_ASSETS,
-)
-from src.dagster_pipeline.assets.germany_sectors import (
-    GERMANY_SECTOR_ASSETS,
-)
-from src.dagster_pipeline.assets.germany_forecast import (
-    GERMANY_FORECAST_ASSETS,
-)
-from src.dagster_pipeline.assets.germany_normalized import (
-    GERMANY_NORMALIZED_ASSETS,
-)
-from src.dagster_pipeline.assets.germany_raw import (
-    GERMANY_RAW_ASSETS,
-)
-from src.dagster_pipeline.assets.icon_d2_ruc import (
-    RAW_ICON_D2_RUC_ASSETS,
-)
-from src.dagster_pipeline.checks.database_analytical import (
-    ANALYTICAL_CHECKS,
-)
-from src.dagster_pipeline.checks.database_bridge import (
-    BRIDGE_CHECKS,
-)
-from src.dagster_pipeline.checks.germany_employment import (
-    GERMANY_EMPLOYMENT_CHECKS,
-)
-from src.dagster_pipeline.checks.germany_sectors import (
-    GERMANY_SECTOR_CHECKS,
-)
-from src.dagster_pipeline.checks.germany_forecast import (
-    GERMANY_FORECAST_CHECKS,
-)
-from src.dagster_pipeline.checks.germany_normalized import (
-    GERMANY_NORMALIZED_CHECKS,
-)
-from src.dagster_pipeline.checks.germany_raw import (
-    GERMANY_RAW_CHECKS,
-)
-from src.dagster_pipeline.checks.database_hostrada_monthly import (
-    HOSTRADA_MONTHLY_CHECKS,
-)
-from src.dagster_pipeline.checks.database_hostrada_reference import (
-    HOSTRADA_REFERENCE_CHECKS,
-)
-from src.dagster_pipeline.checks.database_hostrada_spatial import (
-    HOSTRADA_SPATIAL_CHECKS,
-)
-from src.dagster_pipeline.checks.database_population import (
-    POPULATION_CHECKS,
-)
-from src.dagster_pipeline.checks.database_spatial import (
-    SPATIAL_CHECKS,
-)
-from src.dagster_pipeline.checks.database_weather_mask import (
-    WEATHER_MASK_CHECKS,
-)
-from src.dagster_pipeline.checks.database_weather_normalized import (
-    WEATHER_NORMALIZED_CHECKS,
-)
-from src.dagster_pipeline.checks.database_weather_raw import (
-    WEATHER_RAW_CHECKS,
-)
-from src.dagster_pipeline.germany_jobs import GERMANY_JOBS
-from src.dagster_pipeline.jobs import (
-    HISTORICAL_TRAJECTORIES_JOB,
-    HOSTRADA_MONTHLY_JOB,
-    HOSTRADA_REFERENCE_JOB,
-    HOSTRADA_SPATIAL_JOB,
-    ICON_D2_RUC_FORECAST_JOB,
-    ICON_D2_RUC_RAW_ACQUISITION_JOB,
-    STATIC_DASHBOARD_EXPORT_JOB,
-)
+from src.dagster_pipeline.checks.raw import RAW_CHECKS
+from src.dagster_pipeline.checks.sectors import SECTOR_CHECKS
+from src.dagster_pipeline.jobs import JOBS
 from src.dagster_pipeline.sensors.ba_gemeindedaten import (
     ba_gemeindedaten_release_sensor,
 )
-from src.dagster_pipeline.sensors.ba_sectors import (
-    ba_sectors_release_sensor,
-)
-from src.dagster_pipeline.sensors.dashboard_export import (
-    dashboard_export_sensor,
-)
-from src.dagster_pipeline.sensors.dwd_weather import (
-    dwd_icon_d2_ruc_availability_sensor,
-)
-from src.dagster_pipeline.sensors.historical_trajectories import (
-    historical_trajectories_sensor,
-)
-from src.dagster_pipeline.static_bootstrap_job import (
-    OPERATIONAL_STATIC_JOB,
-)
+from src.dagster_pipeline.sensors.ba_sectors import ba_sectors_release_sensor
+from src.dagster_pipeline.sensors.dwd_forecast import dwd_forecast_availability_sensor
+from src.dagster_pipeline.sensors.forecast_publish import forecast_publish_sensor
 
 
 defs = dg.Definitions(
     assets=[
-        *RAW_ICON_D2_RUC_ASSETS,
-        *POPULATION_ASSETS,
         *SPATIAL_ASSETS,
-        *BRIDGE_ASSETS,
-        *HOSTRADA_SPATIAL_ASSETS,
-        *HOSTRADA_MONTHLY_ASSETS,
-        *HOSTRADA_REFERENCE_ASSETS,
-        *WEATHER_MASK_ASSETS,
-        *WEATHER_RAW_ASSETS,
-        *WEATHER_NORMALIZED_ASSETS,
-        *ANALYTICAL_ASSETS,
-        *HISTORICAL_TRAJECTORIES_ASSETS,
-        *DASHBOARD_EXPORT_ASSETS,
-        *GERMANY_RAW_ASSETS,
-        *GERMANY_NORMALIZED_ASSETS,
-        *GERMANY_FORECAST_ASSETS,
-        *GERMANY_EMPLOYMENT_ASSETS,
-        *GERMANY_SECTOR_ASSETS,
+        *RAW_ICON_D2_RUC_ASSETS,
+        *RAW_ASSETS,
+        *NORMALIZED_ASSETS,
+        *FORECAST_ASSETS,
+        *DASHBOARD_ASSETS,
+        *EMPLOYMENT_ASSETS,
+        *SECTOR_ASSETS,
     ],
     asset_checks=[
-        *POPULATION_CHECKS,
         *SPATIAL_CHECKS,
-        *BRIDGE_CHECKS,
-        *HOSTRADA_SPATIAL_CHECKS,
-        *HOSTRADA_MONTHLY_CHECKS,
-        *HOSTRADA_REFERENCE_CHECKS,
-        *WEATHER_MASK_CHECKS,
-        *WEATHER_RAW_CHECKS,
-        *WEATHER_NORMALIZED_CHECKS,
-        *ANALYTICAL_CHECKS,
-        *GERMANY_RAW_CHECKS,
-        *GERMANY_NORMALIZED_CHECKS,
-        *GERMANY_FORECAST_CHECKS,
-        *GERMANY_EMPLOYMENT_CHECKS,
-        *GERMANY_SECTOR_CHECKS,
+        *RAW_CHECKS,
+        *NORMALIZED_CHECKS,
+        *FORECAST_CHECKS,
+        *EMPLOYMENT_CHECKS,
+        *SECTOR_CHECKS,
     ],
-    jobs=[
-        OPERATIONAL_STATIC_JOB,
-        ICON_D2_RUC_RAW_ACQUISITION_JOB,
-        ICON_D2_RUC_FORECAST_JOB,
-        HOSTRADA_SPATIAL_JOB,
-        HOSTRADA_MONTHLY_JOB,
-        HOSTRADA_REFERENCE_JOB,
-        HISTORICAL_TRAJECTORIES_JOB,
-        STATIC_DASHBOARD_EXPORT_JOB,
-        *GERMANY_JOBS,
-    ],
+    jobs=[*JOBS],
     sensors=[
-        dwd_icon_d2_ruc_availability_sensor,
-        historical_trajectories_sensor,
-        dashboard_export_sensor,
+        dwd_forecast_availability_sensor,
+        forecast_publish_sensor,
         ba_gemeindedaten_release_sensor,
         ba_sectors_release_sensor,
     ],

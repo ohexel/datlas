@@ -29,7 +29,7 @@ def make_session() -> requests.Session:
     session.headers.update(
         {
             "User-Agent": (
-                "berlin_capstone_icon_d2_ruc/2.0"
+                "datlas-icon-d2-ruc/1.0"
             )
         }
     )

@@ -37,7 +37,7 @@ The Berlin pipeline, its views, sensor, tests and dashboard are unchanged
 
 On the maintainer's installed database (PostgreSQL 16.9, PostGIS 3.5.2); forecast
 run 2026-11-14 09:00 UTC. Measured values are in
-[germany-layer-facts.md](germany-layer-facts.md); those from the final
+[germany-layer-facts.md](facts.md); those from the final
 verification are below.
 
 | What | Result |

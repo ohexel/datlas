@@ -3,7 +3,7 @@ from src.database.connection import database_connection, database_health
 
 def main() -> None:
     with database_connection(
-        application_name="capstone_database_health"
+        application_name="datlas_database_health"
     ) as connection:
         health = database_health(connection)
 

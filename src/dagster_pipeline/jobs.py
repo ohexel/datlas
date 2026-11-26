@@ -1,126 +1,127 @@
+"""Jobs, one or two per asset group (src/dagster_pipeline/groups.py)."""
+
+from datetime import date
+
 import dagster as dg
 
-from src.dagster_pipeline.assets.dashboard_export import (
-    static_dashboard_export,
+from src.dagster_pipeline.assets.employment import (
+    EMPLOYMENT_ASSETS,
+    normalized_indicator_value,
+    raw_ba_gemeindedaten,
 )
-from src.dagster_pipeline.assets.database_analytical import (
-    analytical_plr_weather,
-    analytical_plr_weather_population,
+from src.dagster_pipeline.assets.sectors import (
+    SECTOR_ASSETS,
+    raw_ba_regionalreport,
+    raw_ba_wz_heft,
 )
-from src.dagster_pipeline.assets.historical_trajectories import (
-    historical_temperature_trajectories,
+from src.dagster_pipeline.assets.forecast import (
+    analytical_current_forecast_25h,
+    normalized_gemeinde_forecast,
+    normalized_icon_gemeinde_bridge,
 )
-from src.dagster_pipeline.assets.database_hostrada_monthly import (
-    analytical_hostrada_hourly,
-    raw_hostrada_month_files,
-    raw_hostrada_month_source,
-)
-from src.dagster_pipeline.assets.database_hostrada_reference import (
-    analytical_hostrada_hourly_reference,
-)
-from src.dagster_pipeline.assets.database_hostrada_spatial import (
-    normalized_hostrada_cell,
-    normalized_hostrada_plr_area_bridge,
-)
-from src.dagster_pipeline.assets.database_weather_normalized import (
-    normalized_icon_d2_ruc_weather,
-)
-from src.dagster_pipeline.assets.database_weather_raw import (
-    raw_icon_d2_ruc_field,
-)
-from src.dagster_pipeline.assets.icon_d2_ruc import (
-    RAW_ICON_D2_RUC_ASSETS,
-)
+from src.dagster_pipeline.assets.normalized import NORMALIZED_ASSETS
+from src.dagster_pipeline.assets.raw import RAW_ASSETS
+from src.dagster_pipeline.assets.dashboard import web_germany_dashboard
+from src.dagster_pipeline.assets.database_spatial import SPATIAL_ASSETS
+from src.dagster_pipeline.assets.icon_d2_ruc import RAW_ICON_D2_RUC_ASSETS
 
 
-ICON_D2_RUC_RAW_ACQUISITION_JOB = dg.define_asset_job(
-    name="icon_d2_ruc_raw_acquisition",
+# docker/dagster.yaml stops any run after 300 s, which fits the forecast jobs.
+# The static build (4 min from an empty database) and the BA loads (downloads
+# with rate limits) get 30 minutes.
+LONG_RUN_TAGS = {"dagster/max_runtime": "1800"}
+
+STATIC_JOB = dg.define_asset_job(
+    name="static",
+    tags=LONG_RUN_TAGS,
+    selection=dg.AssetSelection.assets(
+        *SPATIAL_ASSETS,
+        *RAW_ASSETS,
+        *NORMALIZED_ASSETS,
+        normalized_icon_gemeinde_bridge,
+    ),
+    description=(
+        "Load the ICON grid and build its cells; acquire and load VG250 and "
+        "Zensus 2022; build the normalized hierarchy, population and the "
+        "cell-Gemeinde bridge."
+    ),
+)
+
+FORECAST_JOB = dg.define_asset_job(
+    name="forecast",
     selection=dg.AssetSelection.assets(
         *RAW_ICON_D2_RUC_ASSETS,
+        normalized_gemeinde_forecast,
     ),
+    # One process per run: the sensor launches up to ten partitions per tick,
+    # and a subprocess per step only adds start-up time (capstone PR #21).
+    executor_def=dg.in_process_executor,
     description=(
-        "Acquire and validate the four retained raw ICON D2 RUC "
-        "GRIB fields for one forecast partition."
+        "One forecast partition: the four raw DWD fields (GRIB files) and "
+        "the cell and Gemeinde aggregation."
     ),
 )
 
-
-ICON_D2_RUC_FORECAST_JOB = dg.define_asset_job(
-    name="icon_d2_ruc_forecast",
+PUBLISH_JOB = dg.define_asset_job(
+    name="forecast_publish",
     selection=dg.AssetSelection.assets(
-        *RAW_ICON_D2_RUC_ASSETS,
-        raw_icon_d2_ruc_field,
-        normalized_icon_d2_ruc_weather,
-        analytical_plr_weather,
-        analytical_plr_weather_population,
+        analytical_current_forecast_25h,
+        web_germany_dashboard,
     ),
-    executor_def = dg.in_process_executor,
+    executor_def=dg.in_process_executor,
     description=(
-        "Acquire one ICON D2 RUC forecast partition, load the "
-        "Berlin-scoped source values, normalize the weather fields, "
-        "area-weight them to PLRs, and join population exposure."
+        "Publish the current complete run, apply retention, run checks 5-6 "
+        "and export the map's data files."
+    ),
+)
+
+EMPLOYMENT_JOB = dg.define_asset_job(
+    name="employment",
+    tags=LONG_RUN_TAGS,
+    selection=dg.AssetSelection.assets(*EMPLOYMENT_ASSETS),
+    description=(
+        "Acquire one vintage of the BA Gemeindedaten (run config: reference "
+        "date), load it raw and refresh the indicator values on the hierarchy, "
+        "with the BA source checks. Needs static first."
     ),
 )
 
 
-HOSTRADA_SPATIAL_JOB = dg.define_asset_job(
-    name="hostrada_spatial",
-    selection=dg.AssetSelection.assets(
-        normalized_hostrada_cell,
-        normalized_hostrada_plr_area_bridge,
-    ),
+def employment_run_config(reference_date: date) -> dict:
+    """Run config that sets the reference date of both employment assets."""
+    config = {"config": {"reference_date": reference_date.isoformat()}}
+    return {
+        "ops": {
+            raw_ba_gemeindedaten.op.name: config,
+            normalized_indicator_value.op.name: config,
+        }
+    }
+
+
+SECTORS_JOB = dg.define_asset_job(
+    name="sectors",
+    tags=LONG_RUN_TAGS,
+    selection=dg.AssetSelection.assets(*SECTOR_ASSETS),
     description=(
-        "Construct the Berlin-scoped HOSTRADA cells and materialize "
-        "their reusable, quality-checked area bridge to current PLRs."
+        "Download one quarter of the BA sector data (run config: file date): "
+        "the 17 WZ booklets for that quarter and a year earlier, and one "
+        "Regionalreport per Kreis, one request at a time; load them raw and "
+        "refresh the sector values, with the sector checks. Needs "
+        "static first."
     ),
 )
 
 
-HOSTRADA_MONTHLY_JOB = dg.define_asset_job(
-    name="hostrada_monthly",
-    selection=dg.AssetSelection.assets(
-        raw_hostrada_month_files,
-        raw_hostrada_month_source,
-        analytical_hostrada_hourly,
-    ),
-    description=(
-        "Acquire and validate three HOSTRADA source files, stream one UTC "
-        "month of Berlin cells, and materialize complete PLR and Berlin hours."
-    ),
-)
+def sector_run_config(file_date: date) -> dict:
+    """Run config that sets the file date of both raw sector assets."""
+    config = {"config": {"file_date": file_date.isoformat()}}
+    return {"ops": {raw_ba_wz_heft.op.name: config, raw_ba_regionalreport.op.name: config}}
 
 
-HOSTRADA_REFERENCE_JOB = dg.define_asset_job(
-    name="hostrada_reference",
-    selection=dg.AssetSelection.assets(
-        analytical_hostrada_hourly_reference,
-    ),
-    description=(
-        "Refresh one Berlin-local calendar month of PLR and Berlin "
-        "temperature median, p90, and observed maximum references."
-    ),
-)
-
-
-HISTORICAL_TRAJECTORIES_JOB = dg.define_asset_job(
-    name="historical_temperature_trajectories",
-    selection=dg.AssetSelection.assets(
-        historical_temperature_trajectories,
-    ),
-    description=(
-        "Extract the 31-year historical trajectory cache matching the "
-        "current complete 25-hour forecast horizon."
-    ),
-)
-
-
-STATIC_DASHBOARD_EXPORT_JOB = dg.define_asset_job(
-    name="static_dashboard_export",
-    selection=dg.AssetSelection.assets(
-        static_dashboard_export,
-    ),
-    description=(
-        "Publish the static dashboard for the current complete 25-hour "
-        "forecast horizon."
-    ),
-)
+JOBS = [
+    STATIC_JOB,
+    FORECAST_JOB,
+    PUBLISH_JOB,
+    EMPLOYMENT_JOB,
+    SECTORS_JOB,
+]

@@ -3,6 +3,9 @@
 Status: Accepted on the `germany-layer` branch (14 Nov 2026). The storage
 choice in the second part is a deliberate trade-off that may need to be
 revisited if storage becomes an issue (see below).
+Amended by [ADR 021](021-separation-from-the-capstone.md): check 7 is removed, so
+the stored cell values now serve check 6 alone; the apparent-temperature
+function is part of datlas's base schema.
 
 ## Context
 

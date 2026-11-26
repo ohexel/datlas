@@ -1,6 +1,6 @@
 # ADR 003: Forecast partitions reflect DWD publication and retention
 
-Status: Accepted.
+Status: Accepted in the capstone; still holds for datlas (ADR 021). Its examples refer to the Berlin capstone.
 
 ## Context
 

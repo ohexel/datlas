@@ -1,0 +1,159 @@
+from dataclasses import asdict
+
+import dagster as dg
+
+from src.database.connection import database_connection
+from src.dagster_pipeline.assets.normalized import (
+    NORMALIZED_HIERARCHY_KEY,
+    NORMALIZED_POPULATION_KEY,
+)
+from src.dagster_pipeline.groups import FORECAST_GROUP, STATIC_GROUP
+from src.dagster_pipeline.assets.icon_d2_ruc import RAW_ICON_D2_RUC_ASSETS
+from src.dagster_pipeline.assets.database_spatial import NORMALIZED_ICON_CELL_KEY
+from src.dagster_pipeline.partitions import (
+    WEATHER_PARTITIONS,
+    forecast_key_from_partition,
+)
+from src.ingestion.contract import GEOGRAPHY_VERSION
+from src.retention.grib_files import database_run_times, prune_grib_files
+from src.database.forecast import (
+    SOURCE_GRID_ID,
+    apply_forecast_schema,
+    process_partition,
+)
+
+
+NORMALIZED_ICON_BRIDGE_KEY = dg.AssetKey(["normalized", "icon_gemeinde_bridge"])
+NORMALIZED_GEMEINDE_FORECAST_KEY = dg.AssetKey(["normalized", "gemeinde_forecast"])
+ANALYTICAL_CURRENT_FORECAST_KEY = dg.AssetKey(["analytical", "current_forecast_25h"])
+
+# Open decision 3 (Ole, 2026-11-09): keep the newest complete run and the one
+# before it. GRIB files of these runs are kept too (src/retention/grib_files.py).
+KEEP_COMPLETE_RUNS = 2
+
+
+@dg.asset(
+    key=NORMALIZED_ICON_BRIDGE_KEY,
+    deps=[NORMALIZED_HIERARCHY_KEY, NORMALIZED_ICON_CELL_KEY],
+    group_name=STATIC_GROUP,
+    description=(
+        "Cell-Gemeinde area bridge: the area of every ICON cell "
+        "(normalized.icon_cell, EPSG:3035) inside every Gemeinde."
+    ),
+)
+def normalized_icon_gemeinde_bridge(context: dg.AssetExecutionContext) -> None:
+    with database_connection(application_name="datlas_bridge") as connection:
+        apply_forecast_schema(connection)
+        connection.commit()  # release the view locks before the rebuild
+        cells, rows, gemeinden = connection.execute(
+            "SELECT * FROM normalized.refresh_icon_bridge(%s, %s)",
+            (GEOGRAPHY_VERSION, SOURCE_GRID_ID),
+        ).fetchone()
+        if not cells:
+            # Raised inside the transaction, so the previous bridge is kept.
+            raise RuntimeError(
+                f"Bridge is empty: normalized.icon_cell has no cells for "
+                f"{SOURCE_GRID_ID}; materialize normalized/icon_cell first"
+            )
+    context.add_output_metadata(
+        {
+            "geography_version": GEOGRAPHY_VERSION,
+            "source_grid_id": SOURCE_GRID_ID,
+            "cell_count": int(cells),
+            "bridge_row_count": int(rows),
+            "gemeinde_count": int(gemeinden),
+        }
+    )
+
+
+@dg.asset(
+    key=NORMALIZED_GEMEINDE_FORECAST_KEY,
+    partitions_def=WEATHER_PARTITIONS,
+    deps=[*(asset.key for asset in RAW_ICON_D2_RUC_ASSETS), NORMALIZED_ICON_BRIDGE_KEY],
+    group_name=FORECAST_GROUP,
+    description=(
+        "Per-cell temperature and shade apparent temperature for all Germany "
+        "cells and their area-weighted Gemeinde values for one forecast "
+        "partition (SQL)."
+    ),
+)
+def normalized_gemeinde_forecast(context: dg.AssetExecutionContext) -> None:
+    forecast = forecast_key_from_partition(context.partition_key)
+    result = process_partition(forecast)
+    metadata = {key: value for key, value in asdict(result).items() if key != "timings"}
+    metadata.update({f"seconds_{key}": round(value, 4) for key, value in result.timings.items()})
+    context.add_output_metadata(metadata)
+
+
+@dg.asset(
+    key=ANALYTICAL_CURRENT_FORECAST_KEY,
+    deps=[NORMALIZED_GEMEINDE_FORECAST_KEY, NORMALIZED_POPULATION_KEY],
+    group_name=FORECAST_GROUP,
+    description=(
+        "Publishes the current complete Germany forecast: the current_* "
+        "views (Gemeinde, Kreis, Land, Bund; area- and population-weighted "
+        "roll-ups; Gemeinde, Kreis, Land and Bund 24-hour summaries) and "
+        "applies retention (newest complete run plus the previous one; GRIB "
+        "files of runs older than 24 hours and no longer in the database)."
+    ),
+)
+def analytical_current_forecast_25h(context: dg.AssetExecutionContext) -> None:
+    with database_connection(application_name="datlas_publish") as connection:
+        apply_forecast_schema(connection)
+        connection.commit()  # release the view locks before retention
+        current = connection.execute(
+            "SELECT run_time_utc FROM analytical.current_run"
+        ).fetchone()
+        if current is None:
+            raise RuntimeError("No complete Germany forecast run (25 lead times) exists")
+        kept, deleted_cells, deleted_gemeinden = connection.execute(
+            "SELECT * FROM normalized.prune_forecast(%s, %s)",
+            (GEOGRAPHY_VERSION, KEEP_COMPLETE_RUNS),
+        ).fetchone()
+        database_runs = database_run_times(connection)
+        counts = connection.execute(
+            """
+            SELECT
+                (SELECT COUNT(*) FROM analytical.current_gemeinde_forecast_25h),
+                (SELECT COUNT(*) FROM analytical.current_kreis_forecast_25h),
+                (SELECT COUNT(*) FROM analytical.current_land_forecast_25h),
+                (SELECT COUNT(*) FROM analytical.current_bund_forecast_25h),
+                (SELECT COUNT(*) FROM analytical.current_gemeinde_summary),
+                (SELECT COUNT(*) FROM analytical.current_kreis_summary),
+                (SELECT COUNT(*) FROM analytical.current_land_summary),
+                (SELECT COUNT(DISTINCT run_time_utc) FROM normalized.gemeinde_forecast),
+                pg_total_relation_size('normalized.icon_cell_value'),
+                pg_total_relation_size('normalized.gemeinde_forecast')
+            """
+        ).fetchone()
+    # After the commit: only files of runs the database no longer holds go.
+    files = prune_grib_files(keep_run_times=database_runs, dry_run=False)
+    context.add_output_metadata(
+        {
+            "current_run_time_utc": current[0].isoformat(),
+            "grib_files_deleted": files.deleted_file_count,
+            "grib_bytes_deleted": files.bytes_deleted,
+            "grib_files_kept_recent": files.kept_recent_file_count,
+            "grib_files_kept_for_database_runs": files.kept_database_run_file_count,
+            "retention_oldest_kept_run_utc": None if kept is None else kept.isoformat(),
+            "retention_deleted_cell_rows": int(deleted_cells),
+            "retention_deleted_gemeinde_rows": int(deleted_gemeinden),
+            "gemeinde_rows": int(counts[0]),
+            "kreis_rows": int(counts[1]),
+            "land_rows": int(counts[2]),
+            "bund_rows": int(counts[3]),
+            "gemeinde_summary_rows": int(counts[4]),
+            "kreis_summary_rows": int(counts[5]),
+            "land_summary_rows": int(counts[6]),
+            "retained_runs": int(counts[7]),
+            "cell_value_bytes": int(counts[8]),
+            "gemeinde_forecast_bytes": int(counts[9]),
+        }
+    )
+
+
+FORECAST_ASSETS = [
+    normalized_icon_gemeinde_bridge,
+    normalized_gemeinde_forecast,
+    analytical_current_forecast_25h,
+]

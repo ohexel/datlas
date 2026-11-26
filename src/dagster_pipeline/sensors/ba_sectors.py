@@ -5,7 +5,7 @@ The BA publishes both products about six months after the quarter's end
 Once a day the sensor sends two HEAD requests for the quarter after the
 newest one loaded (the Regionalreport of one Kreis and the Germany WZ
 booklet), unless a rate-limit cool-down is active; when both exist it
-requests the germany_sectors job, which then downloads the other files one
+requests the sectors job, which then downloads the other files one
 at a time. Off by default: it polls an external host.
 """
 
@@ -16,9 +16,9 @@ import psycopg
 import requests
 
 from src.database.connection import database_connection
-from src.dagster_pipeline.germany_jobs import GERMANY_SECTORS_JOB, sector_run_config
-from src.germany.ba_sectors import BaRateLimited, PoliteClient, cooldown_until, next_quarter
-from src.germany.contract import (
+from src.dagster_pipeline.jobs import SECTORS_JOB, sector_run_config
+from src.ingestion.ba_sectors import BaRateLimited, PoliteClient, cooldown_until, next_quarter
+from src.ingestion.contract import (
     BA_REGIONALREPORT_CONTRACT,
     BA_WZ_HEFT_CONTRACT,
     SECTOR_LATEST_KNOWN,
@@ -30,9 +30,9 @@ SENSOR_MINIMUM_INTERVAL_SECONDS = 24 * 60 * 60
 
 def latest_loaded_file_date() -> date | None:
     try:
-        with database_connection(application_name="lwr_germany_sector_sensor") as connection:
+        with database_connection(application_name="datlas_sector_sensor") as connection:
             return connection.execute(
-                "SELECT MAX(file_date) FROM raw.de_ba_regionalreport"
+                "SELECT MAX(file_date) FROM raw.ba_regionalreport"
             ).fetchone()[0]
     except psycopg.errors.UndefinedTable:
         return None
@@ -49,12 +49,12 @@ def quarter_is_published(client: PoliteClient, file_date: date) -> bool:
 
 
 @dg.sensor(
-    job=GERMANY_SECTORS_JOB,
+    job=SECTORS_JOB,
     minimum_interval_seconds=SENSOR_MINIMUM_INTERVAL_SECONDS,
     default_status=dg.DefaultSensorStatus.STOPPED,
     description=(
         "Daily HEAD requests for the next quarter of the BA sector data; "
-        "requests germany_sectors once it is published."
+        "requests sectors once it is published."
     ),
 )
 def ba_sectors_release_sensor(context: dg.SensorEvaluationContext) -> dg.RunRequest | dg.SkipReason:

@@ -1,6 +1,6 @@
 # ADR 013: Scope forecast storage to Berlin and limit retention to 24 hours
 
-Status: Accepted.
+Status: Superseded by [ADR 018](018-sql-aggregation-and-cell-storage.md) (forecast rows for all of Germany, two complete runs) and [ADR 021](021-separation-from-the-capstone.md) (GRIB files kept while their run is in the database or younger than 24 hours).
 
 ## Context
 
